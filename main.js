@@ -27,6 +27,7 @@
 // Firefox Nightly: sudo snap install firefox --channel=latext/edge or download from https://www.mozilla.org/en-US/firefox/channel/desktop/
 
 import Renderer from '/lib/Viz/2DRenderer.js'
+import FireWorkObject from '/lib/DSViz/FireWorkObject.js'
 import ParticleSystemObject from '/lib/DSViz/ParticleSystemObject.js'
 import StandardTextObject from '/lib/DSViz/StandardTextObject.js'
 
@@ -41,7 +42,7 @@ async function init() {
   const particles = new ParticleSystemObject(renderer._device, renderer._canvasFormat);
   await renderer.appendSceneObject(particles);
   let fps = '??';
-  var fpsText = new StandardTextObject('fps: ' + fps);
+  var fpsText = new StandardTextObject('fps: ' + fps + '\nClick and drag to interact!\nq: push/pull\nw: firework');
   
   // run animation at 60 fps
   var frameCnt = 0;
@@ -58,10 +59,43 @@ async function init() {
     }
     requestAnimationFrame(renderFrame);
   };
+
+  var isDragging = false;
+  var activeFireworks = [];
+  var attract = -1;
+
+  window.addEventListener("keydown", (e) => {
+    switch (e.key) {
+      case 'q': case 'Q':
+        attract *= -1;
+        break;
+      case 'w': case 'W':
+        var firework = createFirework(renderer);
+        activeFireworks.push(firework);
+        console.log("fireworks!");
+    }
+  });
+  canvasTag.addEventListener('mousedown', (e) => {
+    var mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    var mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
+    particles.mouseInteraction(mouseX, mouseY, attract);
+    isDragging = true;
+  });
+  canvasTag.addEventListener('mousemove', (e) => {
+      var mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+      var mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
+      if (isDragging){
+        particles.mouseInteraction(mouseX, mouseY, attract);
+      }
+    });
+    canvasTag.addEventListener('mouseup', (e) => {
+      isDragging = false;
+    });
+
   lastCalled = Date.now();
   renderFrame();
   setInterval(() => { 
-    fpsText.updateText('fps: ' + frameCnt);
+    fpsText.updateText('fps: ' + frameCnt + '\nClick and drag to interact!\nq: push/pull\nw: firework');
     frameCnt = 0;
   }, 1000); // call every 1000 ms
   return renderer;
@@ -75,3 +109,11 @@ init().then( ret => {
   document.body.appendChild(pTag);
   document.getElementById("renderCanvas").remove();
 });
+
+async function createFirework(renderer){
+  const randX = Math.random() * 2 - 1;
+  const randY = Math.random() * 2 - 1;
+  const fireworks = new FireWorkObject(renderer._device, renderer._canvasFormat, randX, randY);
+  await renderer.appendSceneObject(fireworks);
+  return fireworks;
+}
