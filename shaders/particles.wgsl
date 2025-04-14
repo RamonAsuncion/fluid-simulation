@@ -23,11 +23,12 @@
 
 // TODO 3: Define a struct to store a particle
 struct Particle {
-  pos : vec2f,
-  initPos : vec2f,
-  vel : vec2f,
-  initVel : vec2f,
+  pos : vec3f,
+  initPos : vec3f,
+  vel : vec3f,
+  initVel : vec3f,
   lifeTime : vec2f,
+  dummy : vec2f,
 };
 
 // TODO 4: Write the bind group spells here using array<Particle>
@@ -46,7 +47,7 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
   let theta = 2. * pi / 8 * f32(vIdx);
   let x = cos(theta) * size;
   let y = sin(theta) * size;
-  return vec4f(vec2f(x + particle.pos.x, y + particle.pos.y), 0, 1);
+  return vec4f(x + particle.pos.x, y + particle.pos.y, particle.pos.z, 1);
 }
 
 @fragment
@@ -65,16 +66,9 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     // TOOD 7: Add boundary checking and respawn the particle when it is offscreen
     let particle = particlesIn[idx];
 
-    let g = vec2f(0, -.000001);
-    let wind = generateWind(f32(particle.pos.y), 1.5, 0.00003); 
-    let accel = g + wind;
+    let g = vec3f(0, -.000001, 0);
+    let accel = g;
     var newVel = particle.vel + accel;
-    if (newVel.x > maxVel || newVel.x < -maxVel){
-      newVel.x = maxVel;
-    }
-    if (newVel.y > maxVel || newVel.y < -maxVel){
-      newVel.y = maxVel;
-    }
 
     var newPos = particle.pos + particle.vel; 
     
@@ -92,7 +86,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
       newVel = particle.initVel;
       particlesOut[idx].lifeTime[0] = particlesOut[idx].lifeTime[1];
     }
-    //cap velocity
+    
     
     particlesOut[idx].pos = newPos;
     particlesOut[idx].vel = newVel;
