@@ -32,21 +32,23 @@ struct Particle {
 
 //fluid simulation parameters
 const mass = 1.0;
-const smoothingRadius = .1;
+const smoothingRadius = 0.07;
+const smoothingRate = 4;
 const pi = 3.14159265;
-const num_particles = 64;
+const func_volume = (smoothingRate + 1)/(2 * pi * smoothingRadius);
+const num_particles = 256;
 const targetDensity = 1;
-const pressureMultiplier= 0.000001;
-const gravityMultiplier = 0.000001;
+const pressureMultiplier= 1;
+const gravityMultiplier = 0.01;
 //grid parameters
 const grid_size = .05;
 const grid_length = i32(2/grid_size);
 const max_per_cell = 64;
 //boundary box for the fluid
-const left_bound = -.1;
-const right_bound = .1;
-const top_bound = .1;
-const bot_bound = -.1;
+const left_bound = -.3;
+const right_bound = .3;
+const top_bound = .3;
+const bot_bound = -.3;
 const use_acceleration = 0; //non-zero to use acceleration structures
 const maxVel = .1;
 
@@ -72,7 +74,8 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
 
 @fragment
 fn fragmentMain() -> @location(0) vec4f {
-  return vec4f(238.f/255, 118.f/255, 35.f/255, 1); // (R, G, B, A)
+  // return vec4f(238.f/255, 118.f/255, 35.f/255, 1); // (R, G, B, A)
+  return vec4f(1, 0, 0, 1);
 }
 
 @compute @workgroup_size(256)
@@ -85,22 +88,25 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     let particle = particlesIn[idx];
     //f = ma
     let forces = calculateForces(idx);
+    //let forces = vec2f(0, -0.1);
     let accel = forces / mass;
     var newVel = particle.vel + accel;
-    //damp the velocity
-    newVel *= .90;
-
+    
     //cap the velocity
-    if (newVel.x > maxVel || newVel.x < -maxVel){
-      newVel.x = maxVel;
+    if (abs(newVel.x) > maxVel) {
+      newVel.x = min(abs(newVel.x), maxVel) * (abs(newVel.x) / newVel.x);
     }
-    if (newVel.y > maxVel || newVel.y < -maxVel){
-      newVel.y = maxVel;
+    if (abs(newVel.y) > maxVel) {
+      newVel.y = min(abs(newVel.y), maxVel) * (abs(newVel.y) / newVel.y);
     }
+    
+    //damp the velocity
+    newVel *= .80;
 
-    var newPos = particle.pos + particle.vel; 
+    // update particle position
+    var newPos = particle.pos + newVel;
     
-    
+
     //keep the particles on the screen
     if (newPos.x < left_bound){
       newPos.x = left_bound;
@@ -122,20 +128,20 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     particlesOut[idx].vel = newVel;
 
     //zero out then write the new grid positions
-    for (var i = 0; i < i32(arrayLength(&gridOut)); i++){
-      gridOut[i] = -1;
-    }
-    for(var i = 0; i < i32(arrayLength(&particlesOut)); i++){
-      var x = floor((particlesOut[i].pos.x + 1) / grid_size);
-      var y = floor((particlesOut[i + 1].pos.y + 1) / grid_size);
-      var index = i32(y * max_per_cell + x);
-      for (var offset = 0; offset < max_per_cell; offset++){
-        if (gridOut[index + offset] == -1){
-          gridOut[index + offset] = i;
-          break;
-        }
-      }
-    }
+    // for (var i = 0; i < i32(arrayLength(&gridOut)); i++){
+    //   gridOut[i] = -1;
+    // }
+    // for(var i = 0; i < i32(arrayLength(&particlesOut)); i++){
+    //   var x = floor((particlesOut[i].pos.x + 1) / grid_size);
+    //   var y = floor((particlesOut[i + 1].pos.y + 1) / grid_size);
+    //   var index = i32(y * max_per_cell + x);
+    //   for (var offset = 0; offset < max_per_cell; offset++){
+    //     if (gridOut[index + offset] == -1){
+    //       gridOut[index + offset] = i;
+    //       break;
+    //     }
+    //   }
+    // }
   }
 }
 
@@ -154,7 +160,8 @@ fn calculateForces(idx: u32) -> vec2f{
   }
 
   // calculate pressure force
-  forces += pressureAproximation(particle.pos, idx, densities);
+  forces -= pressureAproximation(particle.pos, idx, densities) * pressureMultiplier;
+  forces = max(min(forces, vec2f(0.01, 0.01)), vec2f(-0.01, -0.01));
   return forces;
 }
 
@@ -217,9 +224,7 @@ fn acceleratedDensityCalculation(position: vec2f) -> f32{
 //given a certain density, how hard should the fluid push(pressure)
 //further away from target density, the higher the pressure
 fn densityToPressure(density : f32) -> f32{
-  var difference = density - targetDensity;
-  var pressure = difference * pressureMultiplier;
-  return pressure;
+  return density - targetDensity;
 }
 
 fn pressureAproximation(position: vec2f, particle_idx: u32, densities : array<f32, num_particles>) -> vec2f{
@@ -238,12 +243,16 @@ fn rawPressureCalculation(position: vec2f, particle_idx: u32, densities : array<
     particle2 = particlesIn[i];
     var temp = position - particle2.pos;
     var distance = sqrt(dot(temp, temp));
-    var direction = (position - particle2.pos) / distance;
-    var density = densities[i];
-    var slope = smoothingDerivative(smoothingRadius, distance);
-    var pressure = densityToPressure(density);
-    var shared_pressure = (current_density + density) / 2;
-    pressure_force += direction * slope * mass * shared_pressure / current_density;
+    if (distance > 0.0000001) {
+      var direction = temp / distance;
+      var density = densities[i];
+      var slope = smoothingDerivative(smoothingRadius, distance);
+      var shared_pressure = (current_density + density) / 2;
+      pressure_force += direction * slope * mass * shared_pressure;
+      if (length(pressure_force) > 1000.f) {
+        pressure_force *= (1000.f / length(pressure_force));
+      }
+    }
   }
   return pressure_force;
 }
@@ -296,18 +305,16 @@ fn getSharedPressure(density1: f32, density2: f32) -> f32{
 //function to calculate how the influence a particle has on the density decays as the distance away from a particle grows
 fn smoothingFunction(smoothingRadius : f32, distance : f32) -> f32{
   //for calc reasons, this is the volume of the function here. Need to keep that constant so we divide by it (?) just watch sebas' video
-  var func_volume = pi * pow(smoothingRadius, 4) / 6;
-  var value = max(0, smoothingRadius * smoothingRadius - distance * distance * distance);
-  return (smoothingRadius - distance) * (smoothingRadius - distance) / func_volume;
+  var influence = pow(1 - (min(abs(distance), smoothingRadius))/smoothingRadius, smoothingRate);
+  return influence / func_volume;
 }
 
 fn smoothingDerivative(smoothingRadius : f32, distance: f32) -> f32{
   if (distance > smoothingRadius){
     return 0.0;
   }
-  var f = smoothingRadius * smoothingRadius - distance * distance;
-  var scale = 12 / (pi * pow(smoothingRadius, 4));
-  return scale * (distance - smoothingRadius); 
+  var deriv = -(smoothingRate / smoothingRadius) * pow(1 - abs(distance) / smoothingRadius, smoothingRate - 1) - 1;
+  return deriv / func_volume;
 }
 
 
