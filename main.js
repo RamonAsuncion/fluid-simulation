@@ -50,14 +50,19 @@ async function init() {
   var secPerFrame = 1. / tgtFPS;
   var frameInterval = secPerFrame * 1000;
   var lastCalled;
+  var playing = true;
   let renderFrame = () => {
     let elapsed = Date.now() - lastCalled;
     if (elapsed > frameInterval) {
       ++frameCnt;
       lastCalled = Date.now() - (elapsed % frameInterval);
-      renderer.render();
+      if (playing){
+        renderer.render();
+      }
+      
     }
     requestAnimationFrame(renderFrame);
+    
   };
 
   var isDragging = false;
@@ -73,6 +78,8 @@ async function init() {
         var firework = createFirework(renderer);
         activeFireworks.push(firework);
         console.log("fireworks!");
+      case 'p': case 'P':
+        playing = !playing;
     }
   });
   canvasTag.addEventListener('mousedown', (e) => {
