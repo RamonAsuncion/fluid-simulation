@@ -52,7 +52,20 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
 
 @fragment
 fn fragmentMain() -> @location(0) vec4f {
-  return vec4f(238.f/255, 118.f/255, 35.f/255, 1); // (R, G, B, A)
+  let particle = particlesIn[idx];
+  const maxVel = vec3f(.4f, .4f, .4f);
+  const maxMagnitude = sqrt(dot(maxVel, maxVel));
+  var particleMagnitude = sqrt(dot(particle.vel, particle.vel));
+  if (particleMagnitude > maxMagnitude) {
+    particleMagnitude = maxMagnitude;
+  }
+  var r = (255.f*(particleMagnitude/maxMagnitude))/255.f;
+  var g = 0/255.f;
+  var b = 1 - (255.f*(particleMagnitude/maxMagnitude))/255.f;
+  var a = 1;
+  var color = vec4f(r, g, b, a);
+
+  return color; // (R, G, B, A)
 }
 
 @compute @workgroup_size(256)
