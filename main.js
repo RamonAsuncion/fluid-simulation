@@ -29,6 +29,17 @@
 import Renderer from "./lib/Viz/2DRenderer.js";
 import ParticleSystemObject from "./lib/DSViz/ParticleSystemObject.js";
 import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
+import GuiControls from "./lib/Controls/GuiControls.js";
+import Camera from "/lib/Viz/3DCamera.js";
+
+/**
+ * TODO:
+ * 1. Have buffer to associate pixel with topmost particle - 2h
+ * 2. On mouse click/drag, change particle velocities - 20min
+ * Refer to Surface Tracking and Visualization on the paper.
+ * Resize the bounding box (rate of change has to be smaller e.g. 3 ticks) - 15 min
+ * 3. User input buffer to allow user interaction - 5 min
+ */
 
 async function init() {
   // Create a canvas tag
@@ -38,6 +49,13 @@ async function init() {
   // Create a 2d animated renderer
   const renderer = new Renderer(canvasTag);
   await renderer.init();
+  // Create a 3D Camera
+  var camera = new Camera();
+  // Camera mode (false orthogonal, true projective)
+  var lastMouseX = 0;
+  var lastMouseY = 0;
+  var mouseDown = false;
+  var rotationSpeed = 0.01;
   const particles = new ParticleSystemObject(
     renderer._device,
     renderer._canvasFormat
@@ -46,8 +64,20 @@ async function init() {
   await renderer.appendSceneObject(particles);
   let fps = "??";
   var fpsText = new StandardTextObject("fps: " + fps);
-  var instructionTextControls = new StandardTextObject("No controls");
-  instructionTextControls._textCanvas.style.top = "50px";
+
+  // Add instructions text with commands
+  var instructionsText = new StandardTextObject(
+    "Controls:\n" +
+      "R - Reset simulation\n" +
+      "P - Pause menu\n" +
+      "Drag - Move camera\n" +
+      "Scroll - Zoom in/out"
+  );
+  // Position the instructions text below FPS counter
+  instructionsText._textCanvas.style.top = "60px";
+
+  // Initialize GUI controls
+  const controls = new GuiControls(particles);
 
   // run animation at 60 fps
   var frameCnt = 0;
@@ -66,33 +96,69 @@ async function init() {
   };
 
   var isDragging = false;
+  var mouseX = 0;
+  var mouseY = 0;
 
+  // Set up keyboard interaction
   window.addEventListener("keydown", (e) => {
-    switch (
-      e.key
-      // TODO: Keyboard interaction.
-    ) {
+    switch (e.key) {
+      case "r":
+      case "R":
+        // TODO: Reset simulation
+        console.log("Reset requested via keyboard");
+        break;
+      case "p":
+      case "P":
+        // TODO: Toggle pause menu
+        console.log("Pause menu toggled");
+        break;
+      // TODO: Add more keyboard interactions
     }
   });
 
   canvasTag.addEventListener("mousedown", (e) => {
-    var mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-    var mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
+    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    mouseDown = true;
     particles.mouseInteraction(mouseX, mouseY);
     isDragging = true;
   });
 
   canvasTag.addEventListener("mousemove", (e) => {
-    var mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-    var mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
+    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
+
+    if (mouseDown) {
+      const deltaX = e.clientX - lastMouseX;
+      const deltaY = e.clientY - lastMouseY;
+      camera.rotateY(deltaX * rotationSpeed);
+      camera.rotateX(-deltaY * rotationSpeed);
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+    }
+
     if (isDragging) {
       particles.mouseInteraction(mouseX, mouseY);
     }
   });
 
   canvasTag.addEventListener("mouseup", (e) => {
+    mouseDown = false;
     isDragging = false;
   });
+
+  // https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaY
+  canvasTag.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const zoomAmount = e.deltaY * 0.001;
+      camera.zoom(1 + zoomAmount);
+    },
+    { passive: false }
+  );
 
   lastCalled = Date.now();
   renderFrame();
