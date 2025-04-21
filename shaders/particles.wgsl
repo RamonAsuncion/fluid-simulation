@@ -30,11 +30,33 @@ struct Particle {
   lifeTime : vec2f,
 };
 
+//fluid simulation parameters
+const mass = 1.0;
+const smoothingRadius = .1;
+const pi = 3.14159265;
+const num_particles = 64;
+const targetDensity = 1;
+const pressureMultiplier= 0.000001;
+const gravityMultiplier = 0.000001;
+//grid parameters
+const grid_size = .05;
+const grid_length = i32(2/grid_size);
+const max_per_cell = 64;
+//boundary box for the fluid
+const left_bound = -.1;
+const right_bound = .1;
+const top_bound = .1;
+const bot_bound = -.1;
+const use_acceleration = 0; //non-zero to use acceleration structures
+const maxVel = .1;
+
+
 // TODO 4: Write the bind group spells here using array<Particle>
 @group(0) @binding(0) var<storage> particlesIn: array<Particle>;
 @group(0) @binding(1) var<storage, read_write> particlesOut: array<Particle>;
 @group(0) @binding(2) var<storage, read_write> timeBuffer: array<u32>;
-// name the binded variables particlesIn and particlesOut
+@group(0) @binding(3) var<storage> gridIn: array<i32>;
+@group(0) @binding(4) var<storage, read_write> gridOut: array<i32>;
 
 
 @vertex
@@ -42,7 +64,6 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
   // TODO 5: Revise the vertex shader to draw circle to visualize the particles
   let particle = particlesIn[idx];
   let size = 0.0125 / 2f;
-  let pi = 3.14159265;
   let theta = 2. * pi / 8 * f32(vIdx);
   let x = cos(theta) * size;
   let y = sin(theta) * size;
@@ -56,19 +77,20 @@ fn fragmentMain() -> @location(0) vec4f {
 
 @compute @workgroup_size(256)
 fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
-  // TODO 6: Revise the compute shader to update the particles using the velocity
   let idx = global_id.x;
-  const maxVel = .1;
+  
   if (idx < arrayLength(&particlesIn)) {
     particlesOut[idx] = particlesIn[idx];
     
-    // TOOD 7: Add boundary checking and respawn the particle when it is offscreen
     let particle = particlesIn[idx];
-
-    let g = vec2f(0, -.000001);
-    let wind = generateWind(f32(particle.pos.y), 1.5, 0.00003); 
-    let accel = g + wind;
+    //f = ma
+    let forces = calculateForces(idx);
+    let accel = forces / mass;
     var newVel = particle.vel + accel;
+    //damp the velocity
+    newVel *= .90;
+
+    //cap the velocity
     if (newVel.x > maxVel || newVel.x < -maxVel){
       newVel.x = maxVel;
     }
@@ -79,28 +101,228 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     var newPos = particle.pos + particle.vel; 
     
     
-    //wrap around the screen if they go off. They will start slightly off screen but velocity should carry them back in.
-    if (newPos.x < -1 || newPos.x > 1){
-      newPos.x *= -1;
+    //keep the particles on the screen
+    if (newPos.x < left_bound){
+      newPos.x = left_bound;
+      newVel.x *= -1;
     }
-    if (newPos.y < -1 || newPos.y > 1){
-      newPos.y *= -1;
+    else if (newPos.x > right_bound){
+      newPos.x = right_bound;
+      newVel.x *= -1;
     }
-    particlesOut[idx].lifeTime[0] = particle.lifeTime[0] - 1;
-    if (particle.lifeTime[0] <= 0){
-      newPos = particle.initPos;
-      newVel = particle.initVel;
-      particlesOut[idx].lifeTime[0] = particlesOut[idx].lifeTime[1];
+    if (newPos.y < bot_bound){
+      newPos.y = bot_bound;
+      newVel.y *= -1;
     }
-    //cap velocity
-    
+    else if (newPos.y > top_bound){
+      newPos.y = top_bound;
+      newVel.y *= -1;
+    }
     particlesOut[idx].pos = newPos;
     particlesOut[idx].vel = newVel;
+
+    //zero out then write the new grid positions
+    for (var i = 0; i < i32(arrayLength(&gridOut)); i++){
+      gridOut[i] = -1;
+    }
+    for(var i = 0; i < i32(arrayLength(&particlesOut)); i++){
+      var x = floor((particlesOut[i].pos.x + 1) / grid_size);
+      var y = floor((particlesOut[i + 1].pos.y + 1) / grid_size);
+      var index = i32(y * max_per_cell + x);
+      for (var offset = 0; offset < max_per_cell; offset++){
+        if (gridOut[index + offset] == -1){
+          gridOut[index + offset] = i;
+          break;
+        }
+      }
+    }
   }
 }
 
+//find all the forces that should be applied to a given particle, and the net direction of these forces
+fn calculateForces(idx: u32) -> vec2f{
+  
+  var particle = particlesIn[idx];
+  var forces = vec2f(0, 0);
+  //apply gravity
+  forces += vec2f(0, -9.81) * gravityMultiplier;
 
-fn generateWind(y: f32, frequency: f32, strength: f32) -> vec2f {
-  let angle = sin(y * frequency) * 3.14159265 * f32(timeBuffer[0]);
-  return vec2f(cos(angle), sin(angle)) * strength;
+  //precompute densities to make things faster
+  var densities : array<f32, num_particles>;
+  for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
+    densities[i] = pointDensity(particlesIn[i].pos);
+  }
+
+  // calculate pressure force
+  forces += pressureAproximation(particle.pos, idx, densities);
+  return forces;
+}
+
+
+
+//returns the density at a given point
+fn pointDensity(position : vec2f) -> f32{
+  if (use_acceleration == 0){
+    return rawDensityCalculation(position);
+  } 
+  return acceleratedDensityCalculation(position);
+}
+
+fn rawDensityCalculation(position : vec2f) -> f32{
+  var density = 0.0;
+  var particle2 : Particle;
+  for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
+    particle2 = particlesIn[i];
+    var temp = position - particle2.pos;
+    var distance = sqrt(dot(temp, temp));
+    density += mass * smoothingFunction(smoothingRadius, distance);
+  }
+  return density;
+}
+
+fn acceleratedDensityCalculation(position: vec2f) -> f32{
+  var density = 0.0;
+  var particle2 : Particle;
+  //find the cell that the particle is in
+  var x = floor((position.x + 1) / grid_size); //how many grid cells does it take to go from -1 to position.x TODO: these lines dont take in to considerating if the botleft is moved
+  var y = floor((position.y + 1) / grid_size);
+  var cell_pos = vec2f(x,y);
+  var radius_in_cells = i32(ceil(smoothingRadius / grid_size));
+  //the cells that are within the smoothing distance of the position must be checked, iterate over the cells, check if they are within the smoothing radius, then compute those particles
+  for (var dx = i32(-radius_in_cells); dx <= radius_in_cells; dx++) {
+    for (var dy = i32(-radius_in_cells); dy <= radius_in_cells; dy++) {
+      var cell_x = i32(x) + dx;
+      var cell_y = i32(y) + dy;
+
+      // Boundary check
+      if (cell_x < 0 || cell_x >= grid_length || cell_y < 0 || cell_y >= grid_length) {
+        continue;
+      }
+      //the particles contained in cell (cell_x, cell_y) are close enough to probably contribute to the function, and thus must be checked
+      var cell_offset = (cell_y * grid_length + cell_x) * max_per_cell;
+      for(var particle_index = cell_offset; particle_index < cell_offset + max_per_cell; particle_index++){
+        var i = gridIn[particle_index];
+        if (i == -1){ break; }
+        //here is where we can access only adjacent particles within smoothing radius
+        particle2 = particlesIn[i];
+        var temp = position - particle2.pos;
+        var distance = sqrt(dot(temp, temp));
+        density += mass * smoothingFunction(smoothingRadius, distance);
+      }
+      }
+    }
+  return density;
+}
+
+//given a certain density, how hard should the fluid push(pressure)
+//further away from target density, the higher the pressure
+fn densityToPressure(density : f32) -> f32{
+  var difference = density - targetDensity;
+  var pressure = difference * pressureMultiplier;
+  return pressure;
+}
+
+fn pressureAproximation(position: vec2f, particle_idx: u32, densities : array<f32, num_particles>) -> vec2f{
+  if (use_acceleration == 0){
+    return rawPressureCalculation(position, particle_idx, densities);
+  }
+  return acceleratedPressureCalculation(position, particle_idx, densities);
+}
+
+fn rawPressureCalculation(position: vec2f, particle_idx: u32, densities : array<f32, num_particles>) -> vec2f{
+  var pressure_force = vec2f(0, 0);
+  var current_density = densities[particle_idx];
+  var particle2 : Particle;
+  
+  for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
+    particle2 = particlesIn[i];
+    var temp = position - particle2.pos;
+    var distance = sqrt(dot(temp, temp));
+    var direction = (position - particle2.pos) / distance;
+    var density = densities[i];
+    var slope = smoothingDerivative(smoothingRadius, distance);
+    var pressure = densityToPressure(density);
+    var shared_pressure = (current_density + density) / 2;
+    pressure_force += direction * slope * mass * shared_pressure / current_density;
+  }
+  return pressure_force;
+}
+
+fn acceleratedPressureCalculation(position: vec2f, particle_idx: u32, densities : array<f32, num_particles>) -> vec2f{
+  var pressureForce = vec2f(0, 0);
+  var current_density = densities[particle_idx];
+  var particle2 : Particle;
+
+  //find the cell that the particle is in
+  var x = floor((position.x + 1) / grid_size);
+  var y = floor((position.y + 1) / grid_size);
+  var cell_pos = vec2f(x,y); //world coord for the bot left of the cell containing the position
+  
+  //the cells that are within the smoothing distance of the position must be checked, iterate over the cells, check if they are within the smoothing radius, then compute those particles
+  for(var cell_x = 0; cell_x < grid_length; cell_x++){
+    for (var cell_y = 0; cell_y < grid_length; cell_y++){
+      var temp = cell_pos - vec2f(f32(cell_x), f32(cell_y)) * grid_size;
+      var distance = sqrt(dot(temp, temp)); //distance from the position's cell to the current cell, comparing bot left corners
+      if (distance < smoothingRadius){
+        //the particles contained in cell (cell_x, cell_y) are close enough to probably contribute to the function, and thus must be checked
+        var cell_offset = (cell_y * grid_length + cell_x) * max_per_cell;
+        for(var particle_index = cell_offset; particle_index < cell_offset + max_per_cell; particle_index++){
+          var i = gridIn[particle_index];
+          if (i == -1){ break; }
+          //here is where we can access only adjacent particles within smoothing radius
+          particle2 = particlesIn[i];
+          var temp = position - particle2.pos;
+          var distance = sqrt(dot(temp, temp));
+          var direction = (position - particle2.pos) / distance;
+          var density = densities[i];
+          var slope = smoothingDerivative(smoothingRadius, distance);
+          var pressure = densityToPressure(density);
+          var sharedPressure = (current_density + density) / 2;
+
+          pressureForce += direction * slope * mass * sharedPressure / current_density;
+        }
+      }
+    }
+  }
+  return pressureForce;
+}
+
+fn getSharedPressure(density1: f32, density2: f32) -> f32{
+  var pressure1 = densityToPressure(density1);
+  var pressure2 = densityToPressure(density2);
+  return (pressure1 + pressure2) / 2;
+}
+
+//function to calculate how the influence a particle has on the density decays as the distance away from a particle grows
+fn smoothingFunction(smoothingRadius : f32, distance : f32) -> f32{
+  //for calc reasons, this is the volume of the function here. Need to keep that constant so we divide by it (?) just watch sebas' video
+  var func_volume = pi * pow(smoothingRadius, 4) / 6;
+  var value = max(0, smoothingRadius * smoothingRadius - distance * distance * distance);
+  return (smoothingRadius - distance) * (smoothingRadius - distance) / func_volume;
+}
+
+fn smoothingDerivative(smoothingRadius : f32, distance: f32) -> f32{
+  if (distance > smoothingRadius){
+    return 0.0;
+  }
+  var f = smoothingRadius * smoothingRadius - distance * distance;
+  var scale = 12 / (pi * pow(smoothingRadius, 4));
+  return scale * (distance - smoothingRadius); 
+}
+
+
+
+fn intersectForce(particle1: Particle, particle2: Particle) -> vec2f{
+  //check if the distance from the first particle is 2 radius away from the particles
+  //we are calculating the force that should be applied onto the idx1 particle
+  var radius = 0.0125 / 2f;
+  var distance = sqrt(pow(particle1.pos.x - particle2.pos.x, 2) + pow(particle1.pos.y - particle2.pos.y, 2));
+  //if the two particle centers are within 2 radius of eachother, then they are colliding
+  if (distance < 2 * radius){
+    //the repulsion force is along the line between the two centers of the particles, pointing towards idx1
+    var force = particle1.pos - particle2.pos;
+    var scaled_force = force * .1;
+    return force;
+  }
+  return vec2f(0, 0);
 }
