@@ -35,14 +35,14 @@ const right_bound = 1;
 const top_bound = 1;
 const bot_bound = -1;
 //grid parameters
-const grid_size = .08;
-const grid_length = i32((abs(left_bound) + abs(right_bound))/grid_size);
-const grid_height = i32((abs(bot_bound) + abs(top_bound))/grid_size);
-const max_per_cell = 64;
+const cell_size = .08;
+const grid_length = i32((abs(left_bound) + abs(right_bound))/cell_size);
+const grid_height = i32((abs(bot_bound) + abs(top_bound))/cell_size);
+const max_per_cell = 512;
 const use_acceleration = 0; //non-zero to use acceleration structures
 //fluid simulation parameters
 const mass = 1.0;
-const smoothingRadius = grid_size; //this way we only need to check adjacent grid cells, MUST change code to change this value
+const smoothingRadius = cell_size; //this way we only need to check adjacent grid cells, MUST change code to change this value
 const smoothingRate = 4;
 const pi = 3.14159265;
 const e = 2.71828;
@@ -63,7 +63,6 @@ const steps_per_update = .5; //lower value = slower/more stable simulation, some
 @group(0) @binding(3) var<storage> gridIn: array<i32>;
 @group(0) @binding(4) var<storage, read_write> gridOut: array<atomic<i32>>;
 @group(0) @binding(5) var<storage, read_write> densityBuffer: array<f32>;
-
 
 @vertex
 fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u32) -> @builtin(position) vec4f {
@@ -178,10 +177,10 @@ fn acceleratedDensityCalculation(position: vec2f) -> f32{
   var density = 0.0;
   var particle2 : Particle;
   //find the cell that the particle is in
-  var x = floor((position.x + 1) / grid_size); //how many grid cells does it take to go from left bound to position.x
-  var y = floor((position.y + 1) / grid_size);
+  var x = floor((position.x + 1) / cell_size); //how many grid cells does it take to go from left bound to position.x
+  var y = floor((position.y + 1) / cell_size);
   var cell_pos = vec2f(x,y);
-  var radius_in_cells = i32(ceil(smoothingRadius / grid_size));
+  var radius_in_cells = i32(ceil(smoothingRadius / cell_size));
   //the cells that are within the smoothing distance of the position must be checked, iterate over the cells, check if they are within the smoothing radius, then compute those particles
   for (var dx = i32(-radius_in_cells); dx <= radius_in_cells; dx++) {
     for (var dy = i32(-radius_in_cells); dy <= radius_in_cells; dy++) {
@@ -234,15 +233,12 @@ fn rawPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
 
 fn acceleratedPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
   var pressure_force = vec2f(0, 0);
-  var current_density = densityBuffer[particle_idx];
-  var particle2 : Particle;
-
   //find the cell that the particle is in
-  var x = i32(floor((position.x - left_bound) / grid_size));
-  var y = i32(floor((position.y - bot_bound) / grid_size));
+  var x = i32(floor((position.x - left_bound) / cell_size));
+  var y = i32(floor((position.y - bot_bound) / cell_size));
   
-  for(var adjacent_x = x-1; adjacent_x < x + 2; adjacent_x++){
-    for (var adjacent_y = y-1; adjacent_y < y + 2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
+  for(var adjacent_x = x - 1; adjacent_x < x + 2; adjacent_x++){
+    for (var adjacent_y = y - 1; adjacent_y < y + 2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
         //boundary checking
         if (adjacent_x < 0 || adjacent_x >= grid_length){ continue; }
         if (adjacent_y < 0 || adjacent_y >= grid_height){ continue; }
@@ -326,7 +322,6 @@ fn clearGridStructure(@builtin(global_invocation_id) global_id: vec3u){
   if (global_id.x < arrayLength(&gridOut)){
     atomicStore(&gridOut[global_id.x], -1);
   }
-  
 }
 
 @compute @workgroup_size(256)
@@ -334,8 +329,8 @@ fn computeGridStructure(@builtin(global_invocation_id) global_id: vec3u){
   //write the new grid positions
   //global_id is the index of the particle, so there must be a dispatch for each of the particles
   if (global_id.x < arrayLength(&particlesOut)){
-    var x = i32(floor((particlesOut[global_id.x].pos.x - left_bound) / grid_size));
-    var y = i32(floor((particlesOut[global_id.x].pos.y - bot_bound) / grid_size));
+    var x = i32(floor((particlesOut[global_id.x].pos.x - left_bound) / cell_size));
+    var y = i32(floor((particlesOut[global_id.x].pos.y - bot_bound) / cell_size));
     var cell_start = (y * grid_length + x) * max_per_cell;
     for (var index = cell_start; index < cell_start + max_per_cell; index++){
       if (atomicLoad(&gridOut[index]) == -1){
@@ -344,7 +339,6 @@ fn computeGridStructure(@builtin(global_invocation_id) global_id: vec3u){
       }
     }
   }
-  
 }
 
 @compute @workgroup_size(256)
