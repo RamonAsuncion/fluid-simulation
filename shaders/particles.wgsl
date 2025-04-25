@@ -20,8 +20,6 @@
  *                                measures that legally restrict others from doing
  *                                anything the license permits.
  */
-
-// TODO 3: Define a struct to store a particle
 struct Particle {
   pos : vec2f,
   initPos : vec2f,
@@ -36,24 +34,24 @@ const top_bound = 1;
 const bot_bound = -1;
 //grid parameters
 const cell_size = .08;
-const grid_length = i32((abs(left_bound) + abs(right_bound))/cell_size);
-const grid_height = i32((abs(bot_bound) + abs(top_bound))/cell_size);
+const grid_length = i32(ceil((right_bound - left_bound)/cell_size));
+const grid_height = i32(ceil((top_bound - bot_bound)/cell_size));
 const max_per_cell = 512;
-const use_acceleration = 0; //non-zero to use acceleration structures
+const use_acceleration = 1; //non-zero to use acceleration structures
 //fluid simulation parameters
-const mass = 1.0;
-const smoothingRadius = cell_size; //this way we only need to check adjacent grid cells, MUST change code to change this value
-const smoothingRate = 4;
+const mass = 1;
+const smoothing_radius = cell_size; //this way we only need to check adjacent grid cells, MUST change code to change this value
+const smoothing_rate = 4;
 const pi = 3.14159265;
 const e = 2.71828;
-const func_volume = (smoothingRate + 1)/(2 * pi * smoothingRadius);
+const func_volume = (smoothing_rate + 1)/(2 * pi * smoothing_radius);
 const target_density = .01;
-const pressureMultiplier= 1;
-const gravityMultiplier = 0.05;
-const viscosityMultiplier = 2;
+const pressure_multiplier= 1;
+const gravity_multiplier = 0.1;
+const viscosity_multiplier = 1;
 const max_vel = .1;
 const velocity_damping = .8; //multiplies final computed velocity, between 0.5 and 1 prolly
-const steps_per_update = .5; //lower value = slower/more stable simulation, somewhere between .1 and 1
+const steps_per_update = .4; //lower value = slower/more stable simulation, somewhere between .1 and 1
 
 
 // TODO 4: Write the bind group spells here using array<Particle>
@@ -63,6 +61,12 @@ const steps_per_update = .5; //lower value = slower/more stable simulation, some
 @group(0) @binding(3) var<storage> gridIn: array<i32>;
 @group(0) @binding(4) var<storage, read_write> gridOut: array<atomic<i32>>;
 @group(0) @binding(5) var<storage, read_write> densityBuffer: array<f32>;
+
+// currently, in 2D, for each particles (instances), we draw multiple vertices
+// and for each vertex, we draw the sample on the circle using line-strips
+
+// in 3D, for each particles (instances), we draw multiple vertices
+// and for each vertex, we draw the sample on the sphere using triangle-lists
 
 @vertex
 fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u32) -> @builtin(position) vec4f {
@@ -108,7 +112,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     var newPos = particle.pos + newVel * steps_per_update;
     
 
-    //keep the particles in the bounding box
+    //keep the particles in the bounding box, damp a bit from bouncing off the sides
     if (newPos.x < left_bound){
       newPos.x = left_bound;
       newVel.x *= -.9;
@@ -127,8 +131,6 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     }
     particlesOut[idx].pos = newPos;
     particlesOut[idx].vel = newVel;
-
-    
   }
 }
 
@@ -138,23 +140,19 @@ fn calculateForces(idx: u32) -> vec2f{
   var particle = particlesIn[idx];
   var forces = vec2f(0, 0);
   //apply gravity
-  forces += vec2f(0, -9.81) * gravityMultiplier;
+  forces += vec2f(0, -9.81) * gravity_multiplier;
 
   // calculate pressure force
-  forces -= pressureAproximation(particle.pos, idx) * pressureMultiplier; //negative for some reason...
+  forces -= pressureAproximation(particle.pos, idx) * pressure_multiplier; //negative for some reason...
   
   //calculate viscosity force
-  forces += rawViscosityCalculation(idx) * viscosityMultiplier;
-
+  forces += rawViscosityCalculation(idx) * viscosity_multiplier;
 
   forces = max(min(forces, vec2f(0.01, 0.01)), vec2f(-0.01, -0.01));
   return forces;
 }
 
-
-
-//returns the density at a given point
-fn pointDensity(position : vec2f) -> f32{
+fn densityApproximation(position: vec2f) -> f32{
   // if (use_acceleration == 0){
     return rawDensityCalculation(position);
   // } 
@@ -166,9 +164,8 @@ fn rawDensityCalculation(position : vec2f) -> f32{
   var particle2 : Particle;
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
     particle2 = particlesIn[i];
-    var temp = position - particle2.pos;
-    var distance = sqrt(dot(temp, temp));
-    density += mass * smoothingFunction(smoothingRadius, distance);
+    var distance = length(position - particle2.pos);
+    density += mass * smoothingFunction(smoothing_radius, distance);
   }
   return density;
 }
@@ -177,33 +174,26 @@ fn acceleratedDensityCalculation(position: vec2f) -> f32{
   var density = 0.0;
   var particle2 : Particle;
   //find the cell that the particle is in
-  var x = floor((position.x + 1) / cell_size); //how many grid cells does it take to go from left bound to position.x
-  var y = floor((position.y + 1) / cell_size);
-  var cell_pos = vec2f(x,y);
-  var radius_in_cells = i32(ceil(smoothingRadius / cell_size));
-  //the cells that are within the smoothing distance of the position must be checked, iterate over the cells, check if they are within the smoothing radius, then compute those particles
-  for (var dx = i32(-radius_in_cells); dx <= radius_in_cells; dx++) {
-    for (var dy = i32(-radius_in_cells); dy <= radius_in_cells; dy++) {
-      var cell_x = i32(x) + dx;
-      var cell_y = i32(y) + dy;
+  var x = i32(floor((position.x - left_bound) / cell_size));
+  var y = i32(floor((position.y - bot_bound) / cell_size));
+  for(var adjacent_x = x-1; adjacent_x < x+2; adjacent_x++){
+    for (var adjacent_y = y-1; adjacent_y < y+2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
+        //boundary checking
+        if (adjacent_x < 0 || adjacent_x >= grid_length){ continue; }
+        if (adjacent_y < 0 || adjacent_y >= grid_height){ continue; }
 
-      // Boundary check
-      if (cell_x < 0 || cell_x >= grid_length || cell_y < 0 || cell_y >= grid_length) {
-        continue;
-      }
-      //the particles contained in cell (cell_x, cell_y) are close enough to probably contribute to the function, and thus must be checked
-      var cell_offset = (cell_y * grid_length + cell_x) * max_per_cell;
-      for(var particle_index = cell_offset; particle_index < cell_offset + max_per_cell; particle_index++){
-        var i = gridIn[particle_index];
-        if (i == -1){ break; }
-        //here is where we can access only adjacent particles within smoothing radius
-        particle2 = particlesIn[i];
-        var temp = position - particle2.pos;
-        var distance = sqrt(dot(temp, temp));
-        density += mass * smoothingFunction(smoothingRadius, distance);
-      }
+        var cell_start = (adjacent_y * grid_length + adjacent_x) * max_per_cell;
+        for (var i = cell_start; i < cell_start + max_per_cell; i++){
+          var pIdx = gridIn[i]; // the particle index
+          if (pIdx == -1) {  //check if no more particles in this cell
+            break;
+          }
+          particle2 = particlesIn[i];
+          var distance = length(position - particle2.pos);
+          density += mass * smoothingFunction(smoothing_radius, distance);
       }
     }
+  }
   return density;
 }
 
@@ -233,24 +223,36 @@ fn rawPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
 
 fn acceleratedPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
   var pressure_force = vec2f(0, 0);
+  
   //find the cell that the particle is in
   var x = i32(floor((position.x - left_bound) / cell_size));
   var y = i32(floor((position.y - bot_bound) / cell_size));
   
-  for(var adjacent_x = x - 1; adjacent_x < x + 2; adjacent_x++){
-    for (var adjacent_y = y - 1; adjacent_y < y + 2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
+  for(var adjacent_x = x-1; adjacent_x < x+2; adjacent_x++){
+    for (var adjacent_y = y-1; adjacent_y < y+2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
         //boundary checking
         if (adjacent_x < 0 || adjacent_x >= grid_length){ continue; }
         if (adjacent_y < 0 || adjacent_y >= grid_height){ continue; }
 
-        var cell_start = (adjacent_y * grid_length + adjacent_x) * max_per_cell;
-        for (var i = cell_start; i < cell_start + max_per_cell; i++){
+        var cell_start = (adjacent_y * grid_length + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
+        var length = gridIn[cell_start];
+        for (var i = cell_start + 1; i < cell_start + max_per_cell; i++){
           var pIdx = gridIn[i]; // the particle index
-          if (pIdx == -1) { break; } //check if no more particles in this cell
+          if (pIdx == -1) {  //check if no more particles in this cell
+            break;
+          }
           pressure_force += pressureFromPoint(particle_idx, pIdx);
       }
     }
   }
+  // for(var i = 0; i < i32(arrayLength(&gridIn)); i++){
+  //  var pIdx = gridIn[i]; // the particle index
+  // // for (var pIdx = 0; pIdx < i32(arrayLength(&particlesIn)); pIdx++) {
+  //   if (pIdx == -1) {  //check if no more particles in this cell
+  //     continue;
+  //   }
+  //   pressure_force += pressureFromPoint(particle_idx, pIdx);
+  // }
   return pressure_force;
 }
 
@@ -262,7 +264,7 @@ fn pressureFromPoint(particle1Idx: u32, particle2Idx: i32) -> vec2f{
     var direction = temp / distance;
     var current_density = densityBuffer[particle1Idx];
     var other_density = densityBuffer[particle2Idx];
-    var slope = smoothingDerivative(smoothingRadius, distance);
+    var slope = smoothingDerivative(smoothing_radius, distance);
     var shared_pressure = getSharedPressure(current_density, other_density);
     pressure_force = direction * slope * mass * shared_pressure;
     if (length(pressure_force) > 1000.f) {
@@ -279,17 +281,17 @@ fn getSharedPressure(density1: f32, density2: f32) -> f32{
 }
 
 //function to calculate how the influence a particle has on the density decays as the distance away from a particle grows
-fn smoothingFunction(smoothingRadius : f32, distance : f32) -> f32{
+fn smoothingFunction(smoothing_radius : f32, distance : f32) -> f32{
   //for calc reasons, this is the volume of the function here. Need to keep that constant so we divide by it (?) just watch sebas' video
-  var influence = pow(1 - (min(abs(distance), smoothingRadius))/smoothingRadius, smoothingRate);
+  var influence = pow(1 - (min(abs(distance), smoothing_radius))/smoothing_radius, smoothing_rate);
   return influence / func_volume;
 }
 
-fn smoothingDerivative(smoothingRadius : f32, distance: f32) -> f32{
-  if (distance > smoothingRadius){
+fn smoothingDerivative(smoothing_radius : f32, distance: f32) -> f32{
+  if (distance > smoothing_radius){
     return 0.0;
   }
-  var deriv = -(smoothingRate / smoothingRadius) * pow(1 - abs(distance) / smoothingRadius, smoothingRate - 1) - 1;
+  var deriv = -(smoothing_rate / smoothing_radius) * pow(1 - abs(distance) / smoothing_radius, smoothing_rate - 1) - 1;
   return deriv / func_volume;
 }
 
@@ -299,28 +301,30 @@ fn rawViscosityCalculation(idx : u32) -> vec2f{
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
     var particle2 = particlesIn[i];
     var distance = length(particle.pos - particle2.pos);
-    var influence = viscocitySmoothFunction(smoothingRadius, distance);
+    var influence = viscocitySmoothFunction(smoothing_radius, distance);
     viscosity_force += (particle2.vel - particle.vel) * influence;
   }
   return viscosity_force;
 }
 
-fn viscocitySmoothFunction(smoothingRadius: f32, distance: f32) -> f32{
+fn viscocitySmoothFunction(smoothing_radius: f32, distance: f32) -> f32{
   //use a bell curve to get a smooth shape centered around 0. mean of 0, variance of smoothing radius
   if (distance < .000001){
     return 1;
   }
-  else if (distance > smoothingRadius){
+  else if (distance > smoothing_radius){
     return 0;
   }
-  return pow(e, -distance * distance / (2 * smoothingRadius));
+  return pow(e, -distance * distance / (2 * smoothing_radius));
 }
 
 @compute @workgroup_size(256)
 fn clearGridStructure(@builtin(global_invocation_id) global_id: vec3u){
   //empty out then write the new grid positions
   if (global_id.x < arrayLength(&gridOut)){
-    atomicStore(&gridOut[global_id.x], -1);
+    for (var i = 0; i < max_per_cell; i++){
+      atomicStore(&gridOut[global_id.x * max_per_cell + u32(i)], i32(-1));
+    }
   }
 }
 
@@ -332,18 +336,15 @@ fn computeGridStructure(@builtin(global_invocation_id) global_id: vec3u){
     var x = i32(floor((particlesOut[global_id.x].pos.x - left_bound) / cell_size));
     var y = i32(floor((particlesOut[global_id.x].pos.y - bot_bound) / cell_size));
     var cell_start = (y * grid_length + x) * max_per_cell;
-    for (var index = cell_start; index < cell_start + max_per_cell; index++){
-      if (atomicLoad(&gridOut[index]) == -1){
-        atomicStore(&gridOut[index], i32(global_id.x));
-        break;
-      }
-    }
+    
+    var idx = atomicAdd(&gridOut[cell_start], 1); // the first position of each cell stores the next open position in the given cell, retrieve and then increment this value
+    atomicStore(&gridOut[cell_start + idx + 1], i32(global_id.x)); //store the particle idx at the position pointed to by the first position of the cell, +1 to skip the index spot
   }
 }
 
 @compute @workgroup_size(256)
 fn computeDensity(@builtin(global_invocation_id) global_id: vec3u){
   if (global_id.x < arrayLength(&densityBuffer)){
-    densityBuffer[global_id.x] = pointDensity(particlesIn[global_id.x].pos);
+    densityBuffer[global_id.x] = densityApproximation(particlesIn[global_id.x].pos);
   }
 }

@@ -41,6 +41,7 @@ async function init() {
   await renderer.init();
   const particles = new ParticleSystemObject(renderer._device, renderer._canvasFormat);
   await renderer.appendSceneObject(particles);
+  console.log("added particle");
   let fps = '??';
   var fpsText = new StandardTextObject('fps: ' + fps + '\nClick and drag to interact!\nq: push/pull\nw: firework');
   
@@ -52,6 +53,7 @@ async function init() {
   var lastCalled;
   var playing = true;
   let renderFrame = () => {
+    //console.log("rendering");
     let elapsed = Date.now() - lastCalled;
     if (elapsed > frameInterval) {
       ++frameCnt;
@@ -78,8 +80,10 @@ async function init() {
         var firework = createFirework(renderer);
         activeFireworks.push(firework);
         console.log("fireworks!");
+        break;
       case 'p': case 'P':
         playing = !playing;
+        break;
     }
   });
   canvasTag.addEventListener('mousedown', (e) => {
