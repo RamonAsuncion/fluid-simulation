@@ -47,7 +47,8 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
   let theta = 2. * pi / 8 * f32(vIdx);
   let x = cos(theta) * size;
   let y = sin(theta) * size;
-  return vec4f(x + particle.pos.x, y + particle.pos.y, particle.pos.z, 1);
+  let z = cos(theta) * size;
+  return vec4f(x + particle.pos.x, y + particle.pos.y, z + particle.pos.z, 1);
 }
 
 @fragment
