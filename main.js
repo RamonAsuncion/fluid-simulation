@@ -32,15 +32,6 @@ import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
 import GuiControls from "./lib/Controls/GuiControls.js";
 import Camera from "/lib/Viz/3DCamera.js";
 
-/**
- * TODO:
- * 1. Have buffer to associate pixel with topmost particle - 2h
- * 2. On mouse click/drag, change particle velocities - 20min
- * Refer to Surface Tracking and Visualization on the paper.
- * Resize the bounding box (rate of change has to be smaller e.g. 3 ticks) - 15 min
- * 3. User input buffer to allow user interaction - 5 min
- */
-
 async function init() {
   // Create a canvas tag
   const canvasTag = document.createElement("canvas");
@@ -58,7 +49,8 @@ async function init() {
   var rotationSpeed = 0.01;
   const particles = new ParticleSystemObject(
     renderer._device,
-    renderer._canvasFormat
+    renderer._canvasFormat,
+    camera
   );
 
   await renderer.appendSceneObject(particles);
@@ -78,6 +70,7 @@ async function init() {
 
   // Initialize GUI controls
   const controls = new GuiControls(particles);
+  controls.setInitialValues({ boxWidth: 0.1 });
 
   // run animation at 60 fps
   var frameCnt = 0;
@@ -98,9 +91,13 @@ async function init() {
   var isDragging = false;
   var mouseX = 0;
   var mouseY = 0;
+  let isCtrlPressed = false;
 
   // Set up keyboard interaction
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Control") {
+      isCtrlPressed = true;
+    }
     switch (e.key) {
       case "r":
       case "R":
@@ -116,32 +113,50 @@ async function init() {
     }
   });
 
+  window.addEventListener("keyup", (e) => {
+    if (e.key === "Control") {
+      isCtrlPressed = false;
+    }
+  });
+
   canvasTag.addEventListener("mousedown", (e) => {
     mouseX = (e.clientX / window.innerWidth) * 2 - 1;
     mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
     mouseDown = true;
-    particles.mouseInteraction(mouseX, mouseY);
     isDragging = true;
   });
 
-  canvasTag.addEventListener("mousemove", (e) => {
+  canvasTag.addEventListener("mousedown", (e) => {
     mouseX = (e.clientX / window.innerWidth) * 2 - 1;
     mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
+    console.log(`X: ${mouseX} Y: ${mouseY}`);
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+    mouseDown = true;
+    isDragging = true;
+  });
 
-    if (mouseDown) {
-      const deltaX = e.clientX - lastMouseX;
-      const deltaY = e.clientY - lastMouseY;
+  // Update your mousemove event handler
+  canvasTag.addEventListener("mousemove", (e) => {
+    if (!mouseDown) return;
+
+    const deltaX = e.clientX - lastMouseX;
+    const deltaY = e.clientY - lastMouseY;
+
+    if (isCtrlPressed) {
+      camera.moveX(-deltaX * 0.001);
+      camera.moveY(deltaY * 0.001);
+    } else {
       camera.rotateY(deltaX * rotationSpeed);
       camera.rotateX(-deltaY * rotationSpeed);
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
     }
 
-    if (isDragging) {
-      particles.mouseInteraction(mouseX, mouseY);
-    }
+    particles.updateCameraPose(camera);
+
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
   });
 
   canvasTag.addEventListener("mouseup", (e) => {
@@ -154,8 +169,9 @@ async function init() {
     "wheel",
     (e) => {
       e.preventDefault();
-      const zoomAmount = e.deltaY * 0.001;
-      camera.zoom(1 + zoomAmount);
+      const zoomAmount = e.deltaY * 0.005;
+      camera.moveZ(zoomAmount);
+      particles.updateCameraPose(camera);
     },
     { passive: false }
   );
