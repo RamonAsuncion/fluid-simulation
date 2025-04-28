@@ -37,11 +37,11 @@ const cell_size = .08;
 const grid_length = i32(ceil((right_bound - left_bound)/cell_size));
 const grid_height = i32(ceil((top_bound - bot_bound)/cell_size));
 const max_per_cell = 512;
-const use_acceleration = 1; //non-zero to use acceleration structures
+const use_acceleration = 0; //non-zero to use acceleration structures
 //fluid simulation parameters
 const mass = 1;
 const smoothing_radius = cell_size; //this way we only need to check adjacent grid cells, MUST change code to change this value
-const smoothing_rate = 4;
+const smoothing_rate = 1;
 const pi = 3.14159265;
 const e = 2.71828;
 const func_volume = (smoothing_rate + 1)/(2 * pi * smoothing_radius);
@@ -154,10 +154,10 @@ fn calculateForces(idx: u32) -> vec2f{
 }
 
 fn densityApproximation(position: vec2f) -> f32{
-  if (use_acceleration == 0){
+  // if (use_acceleration == 0){
     return rawDensityCalculation(position);
-  } 
-  return acceleratedDensityCalculation(position);
+  // } 
+  // return acceleratedDensityCalculation(position);
 }
 
 fn rawDensityCalculation(position : vec2f) -> f32{
@@ -227,7 +227,9 @@ fn rawPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
   var particle2 : Particle;
   
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
-    pressure_force += pressureFromPoint(particle_idx, i);
+    if (i != i32(particle_idx)) {
+      pressure_force += pressureFromPoint(particle_idx, i);
+    }
   }
   return pressure_force;
 }
@@ -239,18 +241,20 @@ fn acceleratedPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
   var x = i32(floor((position.x - left_bound) / cell_size));
   var y = i32(floor((position.y - bot_bound) / cell_size));
   for(var adjacent_x = x-1; adjacent_x < x+2; adjacent_x++){
+    if (adjacent_x < 0 || adjacent_x > grid_length){ continue; }
     for (var adjacent_y = y-1; adjacent_y < y+2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
-        //boundary checking
-        if (adjacent_x < 0 || adjacent_x > grid_length){ continue; }
-        if (adjacent_y < 0 || adjacent_y > grid_height){ continue; }
+      //boundary checking
+      if (adjacent_y < 0 || adjacent_y > grid_height){ continue; }
 
-        var cell_start = (adjacent_y * grid_length + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
-        for (var i = cell_start + 1; i < cell_start + max_per_cell; i++){
-          var pIdx = gridIn[i]; // the particle index
-          if (pIdx == -1) {  //check if no more particles in this cell
-            break;
-          }
+      var cell_start = (adjacent_y * grid_length + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
+      for (var i = cell_start + 1; i < cell_start + gridIn[cell_start] + 2; i++){
+        var pIdx = gridIn[i]; // the particle index
+        if (pIdx == -1) {  //check if no more particles in this cell
+          break;
+        }
+        if (pIdx != i32(particle_idx)) {
           pressure_force += pressureFromPoint(particle_idx, pIdx);
+        }
       }
     }
   }
@@ -291,10 +295,10 @@ fn getSharedPressure(density1: f32, density2: f32) -> f32{
 
 
 fn viscocityApproximation(idx: u32) -> vec2f{
-  if (use_acceleration == 0){
+  // if (use_acceleration == 0){
     return rawViscosityCalculation(idx);
-  }
-  return acceleratedViscocityCalculation(idx);
+  // }
+  // return acceleratedViscocityCalculation(idx);
 }
 fn rawViscosityCalculation(idx : u32) -> vec2f{
   var viscosity_force = vec2f(0,0);
@@ -383,7 +387,11 @@ fn computeGridStructure(@builtin(global_invocation_id) global_id: vec3u){
     var cell_start = (y * grid_length + x) * max_per_cell;
     
     var idx = atomicAdd(&gridOut[cell_start], 1); // the first position of each cell stores the next open position in the given cell, retrieve and then increment this value
-    atomicStore(&gridOut[cell_start + idx + 1], i32(global_id.x)); //store the particle idx at the position pointed to by the first position of the cell, +1 to skip the index spot
+    // start at -1
+    // 0 is used to keep track of the current last index
+    // so, if we have 1, [0] = 0, implies we should use [1] to store our first particle
+    // so , if we have 2, [0] = 1, implies we should use [2] to store our second particle
+    atomicStore(&gridOut[cell_start + idx + 2], i32(global_id.x)); //store the particle idx at the position pointed to by the first position of the cell, +1 to skip the index spot
   }
 }
 
