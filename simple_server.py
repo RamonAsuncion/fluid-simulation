@@ -25,7 +25,7 @@ import http.server
 import socketserver
 import socket
 
-PORT = 8080
+PORT = 8081
 
 Handler = http.server.SimpleHTTPRequestHandler
 Handler.extensions_map.update(
@@ -49,5 +49,5 @@ while is_port_in_use(PORT):
 
 httpd = socketserver.TCPServer(("", PORT), Handler)
 
-print(f"Serving at http://localhost:{PORT}")
+print(f"Serving at http://localhost:{PORT}/")
 httpd.serve_forever()

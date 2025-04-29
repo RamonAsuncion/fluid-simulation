@@ -57,6 +57,12 @@ struct Camera {
   res: vec2f,
 }
 
+struct MouseInteraction {
+  position: vec2f,
+  isDown: f32,
+  radius: f32
+};
+
 struct BoundaryBox {
   left: f32,
   right: f32,
@@ -65,6 +71,21 @@ struct BoundaryBox {
   front: f32,
   back: f32
 };
+
+/*
+The paper talks about "color field" to identity surface particles.
+I want to create a buffer to identify surface particles and use the 
+surface information to target mouse interface.
+
+*/
+
+// const surfaceThreshold = 0.4; // detecting surface particles
+
+// struct SurfaceInfo {
+//   isOnSurface: i32, // 1 if particle is on surface, 0 otherwise
+//   normal: vec2f,
+//   curvature: f32,
+// };
 
 // define a constant
 const EPSILON : f32 = 0.00000001;
@@ -87,11 +108,13 @@ const maxVel = .1;
 
 @group(0) @binding(0) var<storage> particlesIn: array<Particle>;
 @group(0) @binding(1) var<storage, read_write> particlesOut: array<Particle>;
-@group(0) @binding(2) var<storage, read_write> timeBuffer: array<u32>;
+// @group(0) @binding(2) var<storage, read_write> timeBuffer: array<u32>;
+@group(0) @binding(2) var<storage, read_write> timeBuffer: array<f32>;
 @group(0) @binding(3) var<storage> gridIn: array<i32>;
 @group(0) @binding(4) var<storage, read_write> gridOut: array<i32>;
 @group(0) @binding(5) var<uniform> boundaryBox: BoundaryBox;
 @group(0) @binding(6) var<uniform> cameraPose: Camera ;
+@group(0) @binding(7) var<uniform> mouse: MouseInteraction;
 
 // @vertex
 // fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u32) -> @builtin(position) vec4f {
@@ -118,7 +141,7 @@ fn vertexMain(@builtin(vertex_index) vIdx: u32) -> @builtin(position) vec4f {
     vec3f(boundaryBox.right, boundaryBox.top, boundaryBox.front),
     vec3f(boundaryBox.left, boundaryBox.top, boundaryBox.front)
   );
-  
+
   // 2 triangles per face
   let triangleIndices = array<u32, 36>(
     0, 1, 2,  0, 2, 3,
@@ -132,8 +155,7 @@ fn vertexMain(@builtin(vertex_index) vIdx: u32) -> @builtin(position) vec4f {
   let vertex = corners[triangleIndices[vIdx]];
   let transformedPos = applyMotorToPoint(vertex, cameraPose.motor);
   
-  // Apply perspective projection
-  let depth = 2.0;
+  let depth = 3.0;
   let perspectiveFactor = 1.0 / (1.0 - transformedPos.z/depth);
   
   let x = transformedPos.x * perspectiveFactor;
@@ -170,7 +192,8 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
       newVel.y = maxVel;
     }
 
-    var newPos = particle.pos + particle.vel; 
+    // var newPos = particle.pos + particle.vel; 
+    var newPos = particle.pos + particle.vel * timeBuffer[1]; 
     
     //keep the particles on the screen
     if (newPos.x < boundaryBox.left) {
@@ -208,6 +231,40 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
   }
 }
 
+// TODO:
+// bring mouse position to simulation
+// calculate distance from mouse to particles
+// apply a force that decreases with distance (using a radial falloff function) - Recommendation.
+// scale the force based on mouse movement speed or button state
+fn calculateMouseForce(position: vec2f) -> vec2f {
+  if (mouse.isDown < 0.5) {
+    return vec2f(0.0, 0.0); // not pressed
+  }
+  
+  // get distance
+  let distVec = position - mouse.position;
+  let distSq = dot(distVec, distVec);
+  let radius = mouse.radius;
+  
+  // apply repulsion force
+  if (distSq < radius * radius) {
+    let dist = sqrt(distSq);
+    
+    // normalize
+    var dir = distVec;
+    if (dist > 0.0001) {
+      dir = distVec / dist;
+    }
+    
+    // apply stronger force to closer particles (inverse linear falloff)
+    let strength = 0.01 * (1.0 - dist / radius);
+    
+    return dir * strength;
+  }
+  
+  return vec2f(0.0, 0.0);
+}
+
 //find all the forces that should be applied to a given particle, and the net direction of these forces
 fn calculateForces(idx: u32) -> vec2f{
   
@@ -224,6 +281,9 @@ fn calculateForces(idx: u32) -> vec2f{
 
   // calculate pressure force
   forces += pressureApproximation(particle.pos, idx, densities);
+
+  // forces += calculateMouseForce(particle.pos);
+
   return forces;
 }
 
