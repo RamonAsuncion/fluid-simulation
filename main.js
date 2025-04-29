@@ -1,80 +1,36 @@
-/*!
- * Copyright (c) 2025 SingChun LEE @ Bucknell University. CC BY-NC 4.0.
- *
- * This code is provided mainly for educational purposes at Bucknell University.
- *
- * This code is licensed under the Creative Commons Attribution-NonCommerical 4.0
- * International License. To view a copy of the license, visit
- *   https://creativecommons.org/licenses/by-nc/4.0/
- * or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
- *
- * You are free to:
- *  - Share: copy and redistribute the material in any medium or format.
- *  - Adapt: remix, transform, and build upon the material.
- *
- * Under the following terms:
- *  - Attribution: You must give appropriate credit, provide a link to the license,
- *                 and indicate if changes where made.
- *  - NonCommerical: You may not use the material for commerical purposes.
- *  - No additional restrictions: You may not apply legal terms or technological
- *                                measures that legally restrict others from doing
- *                                anything the license permits.
- */
-
-// Check your browser supports: https://github.com/gpuweb/gpuweb/wiki/Implementation-Status#implementation-status
-// Need to enable experimental flags chrome://flags/
-// Chrome & Edge 113+ : Enable Vulkan, Default ANGLE Vulkan, Vulkan from ANGLE, Unsafe WebGPU Support, and WebGPU Developer Features (if exsits)
-// Firefox Nightly: sudo snap install firefox --channel=latext/edge or download from https://www.mozilla.org/en-US/firefox/channel/desktop/
-
-/**
- *
- */
-
 import Renderer from "./lib/Viz/2DRenderer.js";
 import ParticleSystemObject from "./lib/DSViz/ParticleSystemObject.js";
 import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
 import GuiControls from "./lib/Controls/GuiControls.js";
-import Camera from "/lib/Viz/3DCamera.js";
 
 async function init() {
-  // Create a canvas tag
   const canvasTag = document.createElement("canvas");
   canvasTag.id = "renderCanvas";
   document.body.appendChild(canvasTag);
-  // Create a 2d animated renderer
   const renderer = new Renderer(canvasTag);
   await renderer.init();
-  // Create a 3D Camera
-  var camera = new Camera();
-  // Camera mode (false orthogonal, true projective)
-  var lastMouseX = 0;
-  var lastMouseY = 0;
-  var mouseDown = false;
-  var rotationSpeed = 0.01;
+
   const particles = new ParticleSystemObject(
     renderer._device,
-    renderer._canvasFormat,
-    camera
+    renderer._canvasFormat
   );
 
   await renderer.appendSceneObject(particles);
+
+  let controls;
+  try {
+    controls = new GuiControls(particles);
+    controls.setInitialValues({ boxWidth: 1.9 });
+  } catch (e) {
+    console.log("GUI controls not available: ", e);
+  }
+
   let fps = "??";
-  var fpsText = new StandardTextObject("fps: " + fps);
-
-  // Add instructions text with commands
-  var instructionsText = new StandardTextObject(
-    "Controls:\n" +
-      "R - Reset simulation\n" +
-      "P - Pause menu\n" +
-      "Drag - Move camera\n" +
-      "Scroll - Zoom in/out"
+  var fpsText = new StandardTextObject(
+    "fps: " +
+      fps +
+      "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset"
   );
-  // Position the instructions text below FPS counter
-  instructionsText._textCanvas.style.top = "60px";
-
-  // Initialize GUI controls
-  const controls = new GuiControls(particles);
-  controls.setInitialValues({ boxWidth: 0.1 });
 
   // run animation at 60 fps
   var frameCnt = 0;
@@ -82,120 +38,83 @@ async function init() {
   var secPerFrame = 1 / tgtFPS;
   var frameInterval = secPerFrame * 1000;
   var lastCalled;
+  var playing = true;
   let renderFrame = () => {
     let elapsed = Date.now() - lastCalled;
     if (elapsed > frameInterval) {
       ++frameCnt;
       lastCalled = Date.now() - (elapsed % frameInterval);
-      renderer.render();
+      if (playing) {
+        renderer.render();
+      }
     }
     requestAnimationFrame(renderFrame);
   };
 
   var isDragging = false;
-  var mouseX = 0;
-  var mouseY = 0;
-  -(
-    // Set up keyboard interaction
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Control") {
-        isCtrlPressed = true;
-      }
-      switch (e.key) {
-        case "r":
-        case "R":
-          // TODO: Reset simulation
-          console.log("Reset requested via keyboard");
-          break;
-        case "p":
-        case "P":
-          // TODO: Toggle pause menu
-          console.log("Pause menu toggled");
-          break;
-        // TODO: Add more keyboard interactions
-      }
-    })
-  );
+  var attract = -1;
 
-  window.addEventListener("keyup", (e) => {
-    if (e.key === "Control") {
-      isCtrlPressed = false;
+  window.addEventListener("keydown", (e) => {
+    switch (e.key) {
+      case "q":
+      case "Q":
+        attract *= -1;
+        break;
+      case "p":
+      case "P":
+        playing = !playing;
+        break;
+      case "r":
+      case "R":
+        particles.resetParticles();
+        console.log("Simulation reset");
+        break;
     }
-  });
-
-  canvasTag.addEventListener("mousedown", (e) => {
-    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-    mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-    mouseDown = true;
-    isDragging = true;
-  });
-
-  canvasTag.addEventListener("mousedown", (e) => {
-    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-    mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
-    mouseDown = true;
-    // particles.mouseInteraction(mouseX, mouseY);
-    isDragging = true;
-  });
-
-  canvasTag.addEventListener("mousemove", (e) => {
-    // const rect = canvasTag.getBoundingClientRect();
-    // const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    // const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
-    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-    mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
-
-    if (mouseDown) {
-      const deltaX = e.clientX - lastMouseX;
-      const deltaY = e.clientY - lastMouseY;
-      camera.rotateY(deltaX * rotationSpeed);
-      camera.rotateX(-deltaY * rotationSpeed);
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-      // particles.setMousePosition(mouseX, mouseY);
-    }
-
-    // if (isDragging) {
-    //   particles.mouseInteraction(mouseX, mouseY);
-    // }
   });
 
   canvasTag.addEventListener("mousedown", (e) => {
     const rect = canvasTag.getBoundingClientRect();
     const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+    if (particles.setMouseDown) {
+      particles.setMouseDown(true);
+      particles.setMousePosition(mouseX, mouseY);
+    }
 
-    mouseDown = true;
-    // particles.setMousePosition(mouseX, mouseY);
-    // particles.setMouseDown(true);
+    particles.mouseInteraction(mouseX, mouseY, attract);
+    isDragging = true;
   });
 
-  canvasTag.addEventListener("mouseup", () => {
-    mouseDown = false;
-    // particles.setMouseDown(false);
+  canvasTag.addEventListener("mousemove", (e) => {
+    const rect = canvasTag.getBoundingClientRect();
+    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+    if (particles.setMousePosition) {
+      particles.setMousePosition(mouseX, mouseY);
+    }
+    if (isDragging) {
+      particles.mouseInteraction(mouseX, mouseY, attract);
+    }
+  });
+
+  canvasTag.addEventListener("mouseup", (e) => {
+    if (particles.setMouseDown) {
+      particles.setMouseDown(false);
+    }
+
     isDragging = false;
   });
 
-  // https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaY
-  canvasTag.addEventListener(
-    "wheel",
-    (e) => {
-      e.preventDefault();
-      const zoomAmount = e.deltaY * 0.005;
-      camera.moveZ(zoomAmount);
-      particles.updateCameraPose(camera);
-    },
-    { passive: false }
-  );
+  // make a wheel
 
   lastCalled = Date.now();
   renderFrame();
   setInterval(() => {
-    fpsText.updateText("fps: " + frameCnt);
+    fpsText.updateText(
+      "fps: " +
+        frameCnt +
+        "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset"
+    );
     frameCnt = 0;
   }, 1000); // call every 1000 ms
   return renderer;
