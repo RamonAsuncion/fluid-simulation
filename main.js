@@ -26,6 +26,10 @@
 // Chrome & Edge 113+ : Enable Vulkan, Default ANGLE Vulkan, Vulkan from ANGLE, Unsafe WebGPU Support, and WebGPU Developer Features (if exsits)
 // Firefox Nightly: sudo snap install firefox --channel=latext/edge or download from https://www.mozilla.org/en-US/firefox/channel/desktop/
 
+/**
+ *
+ */
+
 import Renderer from "./lib/Viz/2DRenderer.js";
 import ParticleSystemObject from "./lib/DSViz/ParticleSystemObject.js";
 import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
@@ -91,27 +95,27 @@ async function init() {
   var isDragging = false;
   var mouseX = 0;
   var mouseY = 0;
-  let isCtrlPressed = false;
-
-  // Set up keyboard interaction
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Control") {
-      isCtrlPressed = true;
-    }
-    switch (e.key) {
-      case "r":
-      case "R":
-        // TODO: Reset simulation
-        console.log("Reset requested via keyboard");
-        break;
-      case "p":
-      case "P":
-        // TODO: Toggle pause menu
-        console.log("Pause menu toggled");
-        break;
-      // TODO: Add more keyboard interactions
-    }
-  });
+  -(
+    // Set up keyboard interaction
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Control") {
+        isCtrlPressed = true;
+      }
+      switch (e.key) {
+        case "r":
+        case "R":
+          // TODO: Reset simulation
+          console.log("Reset requested via keyboard");
+          break;
+        case "p":
+        case "P":
+          // TODO: Toggle pause menu
+          console.log("Pause menu toggled");
+          break;
+        // TODO: Add more keyboard interactions
+      }
+    })
+  );
 
   window.addEventListener("keyup", (e) => {
     if (e.key === "Control") {
@@ -131,36 +135,48 @@ async function init() {
   canvasTag.addEventListener("mousedown", (e) => {
     mouseX = (e.clientX / window.innerWidth) * 2 - 1;
     mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
-    console.log(`X: ${mouseX} Y: ${mouseY}`);
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
     mouseDown = true;
+    // particles.mouseInteraction(mouseX, mouseY);
     isDragging = true;
   });
 
-  // Update your mousemove event handler
   canvasTag.addEventListener("mousemove", (e) => {
-    if (!mouseDown) return;
+    // const rect = canvasTag.getBoundingClientRect();
+    // const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    // const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+    mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+    mouseY = (-e.clientY / window.innerHeight) * 2 + 1;
 
-    const deltaX = e.clientX - lastMouseX;
-    const deltaY = e.clientY - lastMouseY;
-
-    if (isCtrlPressed) {
-      camera.moveX(-deltaX * 0.001);
-      camera.moveY(deltaY * 0.001);
-    } else {
+    if (mouseDown) {
+      const deltaX = e.clientX - lastMouseX;
+      const deltaY = e.clientY - lastMouseY;
       camera.rotateY(deltaX * rotationSpeed);
       camera.rotateX(-deltaY * rotationSpeed);
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      // particles.setMousePosition(mouseX, mouseY);
     }
 
-    particles.updateCameraPose(camera);
-
-    lastMouseX = e.clientX;
-    lastMouseY = e.clientY;
+    // if (isDragging) {
+    //   particles.mouseInteraction(mouseX, mouseY);
+    // }
   });
 
-  canvasTag.addEventListener("mouseup", (e) => {
+  canvasTag.addEventListener("mousedown", (e) => {
+    const rect = canvasTag.getBoundingClientRect();
+    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+
+    mouseDown = true;
+    // particles.setMousePosition(mouseX, mouseY);
+    // particles.setMouseDown(true);
+  });
+
+  canvasTag.addEventListener("mouseup", () => {
     mouseDown = false;
+    // particles.setMouseDown(false);
     isDragging = false;
   });
 
