@@ -115,11 +115,11 @@ fn getBottomBound() -> f32 {
 *
 */
 fn getGridLength() -> i32 {
-  return i32(ceil((getRightBound() - getLeftBound())/cell_size));
+  return i32(ceil((getRightBound() - getLeftBound())/cell_size)) + 1;
 }
 
 fn getGridHeight() -> i32 {
-  return i32(ceil((getTopBound() - getBottomBound())/cell_size));
+  return i32(ceil((getTopBound() - getBottomBound())/cell_size)) + 1;
 }
 
 @vertex
@@ -318,6 +318,9 @@ fn pressureFromPoint(particle1Idx: u32, particle2Idx: i32) -> vec2f{
       pressure_force *= 10;
     }
     if (distance < smoothing_radius/4){
+      pressure_force *= 10;
+    }
+    if (distance < smoothing_radius/6){
       pressure_force *= 10;
     }
   }
