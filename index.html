@@ -24,18 +24,36 @@
 -->
 <html>
   <head>
-    <title>Quest 4 Starter</title>
-    <!-- Note that some header tags don't need a close tag. They don't have content, called "void" tags. -->
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-    <!-- Import CSS uisng the link tag -->
-    <link rel="stylesheet" type="text/css" href="./style/assignment.css">
-    <!-- Webpage icon -->
-    <link rel="icon" href="./assets/me.ico" type="image/x-icon">
-    <!-- Include the web app script -->
+    <title>Fluid Simulation</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
+    />
+    <link rel="icon" href="./assets/wave.ico" type="image/x-icon" />
+    <style>
+      html,
+      body,
+      .container {
+        overflow: hidden;
+        display: flex;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        place-content: center center;
+      }
+
+      #renderCanvas {
+        image-rendering: pixelated;
+        display: block;
+        max-width: 100%;
+        width: 100%;
+        height: 100%;
+        touch-action: none;
+      }
+    </style>
     <script type="module" src="main.js"></script>
   </head>
-  <body>
-  </body>
+  <body></body>
 </html>
