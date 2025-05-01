@@ -1,8 +1,8 @@
 struct Particle {
-  pos : vec3f,
-  initPos : vec3f,
-  vel : vec3f,
-  initVel : vec3f,
+  pos : vec4f,
+  initPos : vec4f,
+  vel : vec4f,
+  initVel : vec4f,
   lifeTime : vec2f,
   dummy : vec2f,
 };
@@ -51,7 +51,7 @@ struct MultiVector {
 struct SimulationConstants {
   pressureMultiplier: f32,
   gravityMultiplier: f32,
-  reserved1: f32,
+  max_per_cell: f32,
   reserved2: f32,
 }
 
@@ -65,7 +65,7 @@ const fallback_back = 2.0;
 
 //grid parameters
 const cell_size = .04;
-const max_per_cell = 512;
+//const max_per_cell = 256;
 
 //fluid simulation parameters
 const mass = 1;
@@ -156,7 +156,7 @@ fn getGridWidth() -> i32 {
 @vertex
 fn ballBasedVertex(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u32) -> @builtin(position) vec4f {
   let particle = particlesIn[idx];
-  let r = 0.01;
+  let r = .009;
   let pi = 3.14159265;
   let k = 6u;
   
@@ -213,11 +213,16 @@ fn ballBasedVertex(@builtin(instance_index) idx: u32, @builtin(vertex_index) vId
     }
   }
 
-  let x = r * sin(phi) * sin(theta);
-  let y = r * sin(phi) * cos(theta);
-  let z = r * cos(phi);
+  let x = r * sin(phi) * sin(theta) + particle.pos.x;
+  let y = r * sin(phi) * cos(theta) + particle.pos.y;
+  let z = r * cos(phi) + particle.pos.z;
+  // you need to nromalize your z based on the clipping range
+  var near = .01;
+  var far = 100.;
+  var projectedPt = vec2f(x / z, y / z);
+  var depth = (z - near) / (far - near); // Normalize Z depth
 
-  return vec4f(x + particle.pos.x, y + particle.pos.y, z + particle.pos.z, 1);
+  return vec4f(projectedPt, depth, 1);
 }
 
 @vertex
@@ -251,19 +256,19 @@ fn fragmentMain() -> @location(0) vec4f {
 }
 
 // https://youtu.be/rSKMYc1CQHE?feature=shared&t=1846
-fn applyMouseForce(position: vec2f, velocity: vec2f) -> vec2f {
+fn applyMouseForce(position: vec3f, velocity: vec3f) -> vec3f {
   var newVelocity = velocity;
 
   // button is pressed
   if (mouse.isDown > 0.5) {
-    let mousePos = mouse.position; // x,y
+    let mousePos = vec3f(mouse.position.x, mouse.position.y, 1); // x,y, z is fucking annoying
     let mouseRadius = mouse.radius; // interaction radius
 
     // dist for particle and mouse pos
     let distance = length(position - mousePos);
 
     if (distance < mouseRadius) {
-      var direction: vec2f;
+      var direction: vec3f;
       var forceMagnitude: f32;
 
       if (mouse.attractMode > 0.5) {
@@ -305,11 +310,12 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     let particle = particlesIn[idx];
     //f = ma
     let forces = calculateForces(idx);
+    //let forces = vec3f(0, -0.1, 0);
     let accel = forces / mass;
-    var newVel = particle.vel + accel * getSimulationSpeed();
+    var newVel = particle.vel.xyz + accel * getSimulationSpeed();
     // * steps_per_update;
 
-    // newVel = applyMouseForce(particle.pos, newVel);
+    
     
     //cap the velocity
     if (abs(newVel.x) > max_vel) {
@@ -318,12 +324,15 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     if (abs(newVel.y) > max_vel) {
       newVel.y = max_vel * (abs(newVel.y) / newVel.y);
     }
+    if (abs(newVel.z) > max_vel) {
+      newVel.z = max_vel * (abs(newVel.z) / newVel.z);
+    }
     
     //damp the velocity
     newVel *= velocity_damping;
 
     // update particle position
-    var newPos = particle.pos + newVel * getSimulationSpeed();
+    var newPos = particle.pos.xyz + newVel * getSimulationSpeed();
     // * steps_per_update;
     
     //keep the particles in the bounding box, damp a bit from bouncing off the sides
@@ -343,8 +352,17 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
       newPos.y = getTopBound();
       newVel.y *= -.9;
     }
-    particlesOut[idx].pos = newPos;
-    particlesOut[idx].vel = newVel;
+    if (newPos.z < getFrontBound()){
+      newPos.z = getBottomBound();
+      newVel.z *= -.9;
+    }
+    else if (newPos.z > getBackBound()){
+      newPos.z = getTopBound();
+      newVel.z *= -.9;
+    }
+    
+    particlesOut[idx].pos = vec4f(newPos, 0);
+    particlesOut[idx].vel = vec4f(newVel, 0);
   }
 }
 
@@ -354,13 +372,15 @@ fn calculateForces(idx: u32) -> vec3f{
   var particle = particlesIn[idx];
   var forces = vec3f(0, 0, 0);
   //apply gravity
-  forces += vec3f(0, -9.81, 0) * gravity_multiplier;
+  forces += vec3f(0, 9.81, 0) * constants.gravityMultiplier;
 
-  // calculate pressure force
-  forces -= pressureApproximation(particle.pos, idx) * constants.pressureMultiplier;
+  // // calculate pressure force
+  forces -= pressureApproximation(particle.pos.xyz, idx) * constants.pressureMultiplier;
   
-  //calculate viscosity force
-  forces += viscosityApproximation(idx) * viscosity_multiplier;
+  // //calculate viscosity force
+  // forces += viscosityApproximation(idx) * viscosity_multiplier;
+
+  // forces += applyMouseForce(particle.pos.xyz, particle.vel.xyz);
 
   forces = max(min(forces, vec3f(max_force, max_force, max_force)), vec3f(-max_force, -max_force, -max_force));
   return forces;
@@ -377,7 +397,8 @@ fn densityApproximation(position: vec3f) -> f32{
 fn rawDensityCalculation(position : vec3f) -> f32{
   var density = 0.0;
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
-    var distance = length(position - particlesIn[i].pos);
+    var distance = length(position - particlesIn[i].pos.xyz);
+    //density = max(density + mass * smoothingFunction(smoothing_radius, distance), 1);
     density += mass * smoothingFunction(smoothing_radius, distance);
   }
   return density;
@@ -410,7 +431,7 @@ fn acceleratedDensityCalculation(position: vec3f) -> f32{
               break;
             }
           particle2 = particlesIn[pIdx];
-          var distance = length(position - particle2.pos);
+          var distance = length(position - particle2.pos.xyz);
           density += mass * smoothingFunction(smoothing_radius, distance);
         }
       }
@@ -427,20 +448,21 @@ fn densityToPressure(density : f32) -> f32{
 
 fn pressureApproximation(position: vec3f, particle_idx: u32) -> vec3f{
   let use_acceleration = timeBuffer[2];
-  if (use_acceleration == 0){
+  //if (use_acceleration == 0){
     return rawPressureCalculation(position, particle_idx);
-  }
-  return acceleratedPressureCalculation(position, particle_idx);
+  //}
+  //return acceleratedPressureCalculation(position, particle_idx);
 }
 
 fn rawPressureCalculation(position: vec3f, particle_idx: u32) -> vec3f{
   var pressure_force = vec3f(0, 0, 0);
-  var current_density = densityBuffer[particle_idx];
+  //var current_density = densityBuffer[particle_idx];
   var particle2 : Particle;
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
       pressure_force += pressureFromPoint(particle_idx, i);
   }
   return pressure_force;
+  //return vec3f(0, 0.1, 0);
 }
 
 fn acceleratedPressureCalculation(position: vec3f, particle_idx: u32) -> vec3f{
@@ -475,10 +497,11 @@ fn acceleratedPressureCalculation(position: vec3f, particle_idx: u32) -> vec3f{
     }
   }
   return pressure_force;
+  //return vec3f(0, 0.1, 0);
 }
 
 fn pressureFromPoint(particle1Idx: u32, particle2Idx: i32) -> vec3f{
-  var temp = particlesIn[particle1Idx].pos - particlesIn[particle2Idx].pos;
+  var temp = particlesIn[particle1Idx].pos.xyz - particlesIn[particle2Idx].pos.xyz;
   var distance = length(temp);
   var pressure_force = vec3f(0, 0, 0);
   if (distance > 0.00000001) {
@@ -524,9 +547,9 @@ fn rawViscosityCalculation(idx : u32) -> vec3f{
   var particle = particlesIn[idx];
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
     var particle2 = particlesIn[i];
-    var distance = length(particle.pos - particle2.pos);
+    var distance = length(particle.pos.xyz - particle2.pos.xyz);
     var influence = viscositySmoothFunction(smoothing_radius, distance);
-    viscosity_force += (particle2.vel - particle.vel) * influence;
+    viscosity_force += (particle2.vel.xyz - particle.vel.xyz) * influence;
   }
   return viscosity_force;
 }
@@ -549,16 +572,16 @@ fn acceleratedViscosityCalculation(idx: u32) -> vec3f{
         if (adjacent_y < 0 || adjacent_y > getGridHeight()){ continue; }
         if (adjacent_z < 0 || adjacent_z > getGridWidth()){ continue; }
 
-        var cell_start = (adjacent_y * getGridLength() + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
-        for (var i = cell_start + 1; i < cell_start + max_per_cell; i++){
+        var cell_start = (adjacent_y * getGridLength() + adjacent_x) * i32(constants.max_per_cell); //recall that the first index of each cell is used as an index
+        for (var i = cell_start + 1; i < cell_start + i32(constants.max_per_cell); i++){
           var pIdx = gridIn[i]; // the particle index
           if (pIdx == -1) {  //check if no more particles in this cell
             break;
           }
           var particle2 = particlesIn[pIdx];
-          var distance = length(particle.pos - particle2.pos);
+          var distance = length(particle.pos.xyz - particle2.pos.xyz);
           var influence = viscositySmoothFunction(smoothing_radius, distance);
-          viscosity_force += (particle2.vel - particle.vel) * influence; 
+          viscosity_force += (particle2.vel.xyz - particle.vel.xyz) * influence; 
         }
       }
     }
@@ -596,8 +619,8 @@ fn viscositySmoothFunction(smoothing_radius: f32, distance: f32) -> f32{
 fn clearGridStructure(@builtin(global_invocation_id) global_id: vec3u){
   //empty out then write the new grid positions
   if (global_id.x < arrayLength(&gridOut)){
-    for (var i = 0; i < max_per_cell; i++){
-      atomicStore(&gridOut[global_id.x * max_per_cell + u32(i)], i32(-1));
+    for (var i = 0; i < i32(constants.max_per_cell); i++){
+      atomicStore(&gridOut[global_id.x * u32(constants.max_per_cell) + u32(i)], i32(-1));
     }
   }
 }
@@ -608,14 +631,15 @@ fn computeGridStructure(@builtin(global_invocation_id) global_id: vec3u){
   if (global_id.x < arrayLength(&particlesOut)){
     var x = i32(floor((particlesOut[global_id.x].pos.x - getLeftBound()) / cell_size));
     var y = i32(floor((particlesOut[global_id.x].pos.y - getBottomBound()) / cell_size));
-    if (x < 0 || x >= getGridLength() || y < 0 || y >= getGridHeight()) {
+    var z = i32(floor((particlesOut[global_id.x].pos.z - getFrontBound()) / cell_size));
+    if (x < 0 || x >= getGridLength() || y < 0 || y >= getGridHeight() || z < 0 || z >= getGridWidth()) {
       return;
     }
     
-    var cell_start = (y * getGridLength() + x) * max_per_cell;
+    var cell_start = (z * getGridLength() * getGridHeight() + y * getGridLength() + x) * i32(constants.max_per_cell);
     
     var idx = atomicAdd(&gridOut[cell_start], 1);
-    if (idx >= max_per_cell - 2) {
+    if (idx >= i32(constants.max_per_cell) - 2) {
       return;
     }
     
@@ -626,10 +650,10 @@ fn computeGridStructure(@builtin(global_invocation_id) global_id: vec3u){
 @compute @workgroup_size(256)
 fn computeDensity(@builtin(global_invocation_id) global_id: vec3u){
   if (global_id.x < arrayLength(&densityBuffer)){
-    densityBuffer[global_id.x] = densityApproximation(particlesIn[global_id.x].pos);
+    densityBuffer[global_id.x] = densityApproximation(particlesIn[global_id.x].pos.xyz);
   }
 }
 
 fn getGridIndex(x: i32, y:i32, z:i32) -> i32{
-  return (z * getGridLength() * getGridHeight() + y * getGridLength() + x) * max_per_cell; 
+  return (z * getGridLength() * getGridHeight() + y * getGridLength() + x) * i32(constants.max_per_cell); 
 }
