@@ -309,7 +309,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     var newVel = particle.vel + accel * getSimulationSpeed();
     // * steps_per_update;
 
-    newVel = applyMouseForce(particle.pos, newVel);
+    // newVel = applyMouseForce(particle.pos, newVel);
     
     //cap the velocity
     if (abs(newVel.x) > max_vel) {
