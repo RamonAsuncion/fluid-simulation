@@ -29,7 +29,7 @@ async function init() {
   var fpsText = new StandardTextObject(
     "fps: " +
       fps +
-      "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset"
+      "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset\nshift: attract"
   );
 
   // run animation at 60 fps
@@ -50,13 +50,17 @@ async function init() {
       }
     }
     requestAnimationFrame(renderFrame);
-    
   };
 
   var isDragging = false;
   var attract = -1;
 
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Shift") {
+      particles.setAttractMode(true);
+      particles.setMouseDown(true);
+    }
+
     switch (e.key) {
       case "q":
       case "Q":
@@ -74,16 +78,22 @@ async function init() {
     }
   });
 
+  window.addEventListener("keyup", (e) => {
+    if (e.key === "Shift") {
+      particles.setAttractMode(false);
+      if (!isDragging) {
+        particles.setMouseDown(false);
+      }
+    }
+  });
+
   canvasTag.addEventListener("mousedown", (e) => {
     const rect = canvasTag.getBoundingClientRect();
     const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
-    if (particles.setMouseDown) {
-      particles.setMouseDown(true);
-      particles.setMousePosition(mouseX, mouseY);
-    }
 
-    particles.mouseInteraction(mouseX, mouseY, attract);
+    particles.setMousePosition(mouseX, mouseY);
+    particles.setMouseDown(true);
     isDragging = true;
   });
 
@@ -91,23 +101,18 @@ async function init() {
     const rect = canvasTag.getBoundingClientRect();
     const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
-    if (particles.setMousePosition) {
-      particles.setMousePosition(mouseX, mouseY);
-    }
+
+    particles.setMousePosition(mouseX, mouseY);
+
     if (isDragging) {
-      particles.mouseInteraction(mouseX, mouseY, attract);
+      particles.setMousePosition(mouseX, mouseY);
     }
   });
 
   canvasTag.addEventListener("mouseup", (e) => {
-    if (particles.setMouseDown) {
-      particles.setMouseDown(false);
-    }
-
+    particles.setMouseDown(false);
     isDragging = false;
   });
-
-  // make a wheel
 
   lastCalled = Date.now();
   renderFrame();
@@ -115,7 +120,7 @@ async function init() {
     fpsText.updateText(
       "fps: " +
         frameCnt +
-        "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset"
+        "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset\nshift: attract"
     );
     frameCnt = 0;
   }, 1000); // call every 1000 ms

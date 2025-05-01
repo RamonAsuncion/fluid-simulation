@@ -10,7 +10,8 @@ struct Particle {
 struct MouseInteraction {
   position: vec2f,
   isDown: f32,
-  radius: f32
+  radius: f32,
+  attractMode: f32 // 1 attract, 0 repel
 };
 
 struct Camera {
@@ -45,6 +46,13 @@ struct MultiVector {
   ez: f32, 
   eo: f32,
   eoexeyez: f32
+}
+
+struct SimulationConstants {
+  pressureMultiplier: f32,
+  gravityMultiplier: f32,
+  reserved1: f32,
+  reserved2: f32,
 }
 
 const use_binding_box = 1;
@@ -84,6 +92,8 @@ const velocity_damping = .8; //multiplies final computed velocity, between 0.5 a
 @group(0) @binding(6) var<uniform> cameraPose: Camera;
 @group(0) @binding(7) var<uniform> mouse: MouseInteraction;
 @group(0) @binding(8) var<storage, read_write> densityBuffer: array<f32>;
+@group(0) @binding(9) var<uniform> constants: SimulationConstants;
+
 
 fn getSimulationSpeed() -> f32 {
   return timeBuffer[1] * 0.9 + 0.1; // 0->0.1 1->1.0
@@ -240,6 +250,51 @@ fn fragmentMain() -> @location(0) vec4f {
   return vec4f(1, 0, 0, 1);
 }
 
+// https://youtu.be/rSKMYc1CQHE?feature=shared&t=1846
+fn applyMouseForce(position: vec2f, velocity: vec2f) -> vec2f {
+  var newVelocity = velocity;
+
+  // button is pressed
+  if (mouse.isDown > 0.5) {
+    let mousePos = mouse.position; // x,y
+    let mouseRadius = mouse.radius; // interaction radius
+
+    // dist for particle and mouse pos
+    let distance = length(position - mousePos);
+
+    if (distance < mouseRadius) {
+      var direction: vec2f;
+      var forceMagnitude: f32;
+
+      if (mouse.attractMode > 0.5) {
+        // attract: pull toward mouse
+        direction = normalize(mousePos - position);
+
+        // trying to fix clumping issues
+        forceMagnitude = 0.05 * (1.0 - (distance / mouseRadius) * (distance / mouseRadius));
+
+        if (distance < 0.02) {
+          forceMagnitude = 0.0;
+        }
+
+      } else {
+        // repel: push away from mouse
+        direction = normalize(position - mousePos);
+
+        // base force with linear falloff
+        // increase the base force to create a wider
+        // area of influence fot the mouse
+        forceMagnitude = 0.08 * (1.0 - distance / mouseRadius);
+      }
+
+      // apply force by adding to velocity
+      newVelocity += direction * forceMagnitude;
+    }
+  }
+
+  return newVelocity;
+}
+
 @compute @workgroup_size(256)
 fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
   let idx = global_id.x;
@@ -253,6 +308,8 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     let accel = forces / mass;
     var newVel = particle.vel + accel * getSimulationSpeed();
     // * steps_per_update;
+
+    newVel = applyMouseForce(particle.pos, newVel);
     
     //cap the velocity
     if (abs(newVel.x) > max_vel) {
@@ -300,7 +357,7 @@ fn calculateForces(idx: u32) -> vec3f{
   forces += vec3f(0, -9.81, 0) * gravity_multiplier;
 
   // calculate pressure force
-  forces -= pressureApproximation(particle.pos, idx) * pressure_multiplier; //negative for some reason...
+  forces -= pressureApproximation(particle.pos, idx) * constants.pressureMultiplier;
   
   //calculate viscosity force
   forces += viscosityApproximation(idx) * viscosity_multiplier;
