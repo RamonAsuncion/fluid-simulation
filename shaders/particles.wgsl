@@ -9,7 +9,8 @@ struct Particle {
 struct MouseInteraction {
   position: vec2f,
   isDown: f32,
-  radius: f32
+  radius: f32,
+  attractMode: f32 // 1 attract, 0 repel
 };
 
 struct Camera {
@@ -137,6 +138,51 @@ fn fragmentMain() -> @location(0) vec4f {
   return vec4f(1, 0, 0, 1); // red is cool
 }
 
+// https://youtu.be/rSKMYc1CQHE?feature=shared&t=1846
+fn applyMouseForce(position: vec2f, velocity: vec2f) -> vec2f {
+  var newVelocity = velocity;
+
+  // button is pressed
+  if (mouse.isDown > 0.5) {
+    let mousePos = mouse.position; // x,y
+    let mouseRadius = mouse.radius; // interaction radius
+
+    // dist for particle and mouse pos
+    let distance = length(position - mousePos);
+
+    if (distance < mouseRadius) {
+      var direction: vec2f;
+      var forceMagnitude: f32;
+
+      if (mouse.attractMode > 0.5) {
+        // attract: pull toward mouse
+        direction = normalize(mousePos - position);
+
+        // trying to fix clumping issues
+        forceMagnitude = 0.05 * (1.0 - (distance / mouseRadius) * (distance / mouseRadius));
+
+        if (distance < 0.02) {
+          forceMagnitude = 0.0;
+        }
+
+      } else {
+        // repel: push away from mouse
+        direction = normalize(position - mousePos);
+
+        // base force with linear falloff
+        // increase the base force to create a wider
+        // area of influence fot the mouse
+        forceMagnitude = 0.08 * (1.0 - distance / mouseRadius);
+      }
+
+      // apply force by adding to velocity
+      newVelocity += direction * forceMagnitude;
+    }
+  }
+
+  return newVelocity;
+}
+
 @compute @workgroup_size(256)
 fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
   let idx = global_id.x;
@@ -150,6 +196,8 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     let accel = forces / mass;
     var newVel = particle.vel + accel * getSimulationSpeed();
     // * steps_per_update;
+
+    newVel = applyMouseForce(particle.pos, newVel);
     
     //cap the velocity
     if (abs(newVel.x) > max_vel) {
