@@ -1,4 +1,4 @@
-import Renderer from "./lib/Viz/2DRenderer.js";
+import Renderer from "./lib/Viz/3DRenderer.js";
 import ParticleSystemObject from "./lib/DSViz/ParticleSystemObject.js";
 import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
 import GuiControls from "./lib/Controls/GuiControls.js";

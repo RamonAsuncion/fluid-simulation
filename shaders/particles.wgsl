@@ -1,9 +1,10 @@
 struct Particle {
-  pos : vec2f,
-  initPos : vec2f,
-  vel : vec2f,
-  initVel : vec2f,
+  pos : vec3f,
+  initPos : vec3f,
+  vel : vec3f,
+  initVel : vec3f,
   lifeTime : vec2f,
+  dummy : vec2f,
 };
 
 struct MouseInteraction {
@@ -59,6 +60,8 @@ const fallback_left = -1.0;
 const fallback_right = 1.0;
 const fallback_top = 1.0;
 const fallback_bottom = -1.0;
+const fallback_front = 1.0;
+const fallback_back = 2.0;
 
 //grid parameters
 const cell_size = .04;
@@ -124,12 +127,97 @@ fn getBottomBound() -> f32 {
   return fallback_bottom;
 }
 
+fn getFrontBound() -> f32 {
+  if (use_binding_box != 0) {
+    return boundaryBox.front;
+  }
+  return fallback_front;
+}
+
+fn getBackBound() -> f32 {
+  if (use_binding_box != 0) {
+    return boundaryBox.back;
+  }
+  return fallback_back;
+}
+
 fn getGridLength() -> i32 {
   return i32(ceil((getRightBound() - getLeftBound())/cell_size)) + 1;
 }
 
 fn getGridHeight() -> i32 {
   return i32(ceil((getTopBound() - getBottomBound())/cell_size)) + 1;
+}
+
+fn getGridWidth() -> i32 {
+  return i32(ceil((getBackBound() - getFrontBound())/cell_size)) + 1;
+}
+
+@vertex
+fn ballBasedVertex(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u32) -> @builtin(position) vec4f {
+  let particle = particlesIn[idx];
+  let r = 0.01;
+  let pi = 3.14159265;
+  let k = 6u;
+  
+  // a sphere in three dimensions can be parameterized by angles t and p, 0 <= t <= 2 pi. -pi/2 <= p <= pi/2
+  
+  //sweep a little bit of area of a sphere, some dt dp, will create a square. This square will be made into two triangles that share 2 vertices
+  //idx refers to the particle index that we are computing. There are 6 vertices to compute per vIdx
+  // vIdx / 6 refers to the angle offset we use. vIdx % 6 refers to which specific vertex we are drawing
+  let angle_offset = u32(vIdx / 6);
+  let vertex_number = i32(vIdx % 6);
+  //I chose that each sphere will be broken into a 2k by k grid with (i,j) indices. let k = 3
+  let i = (angle_offset) % (2 * k);
+  let j = u32((angle_offset) / (2 * k));
+  //there are 2k total divisions on theta. to get out angle out we do theta per division * number divisons
+  let delta_theta = (2 * pi) / f32(2 * k - 1);
+  var theta =  delta_theta * f32(i);
+  //same for phi, k total divisions, j is the number of divisions we traveled
+  let delta_phi = (pi) / f32(k - 1);
+  var phi = -pi/2 + delta_phi * f32(j); 
+  // 
+  switch (vertex_number) {
+    case 0: {
+      //bot left for 1st triangle
+      break;
+    }
+    case 1: {
+      //bot right, need to move in theta direction
+      theta += delta_theta;
+      break;
+    }
+    case 2: {
+      //top right for 1st triangle, both directions need to move
+      theta += delta_theta;
+      phi += delta_phi;
+      break;
+    }
+    case 3: {
+      //no offsets
+      break;
+    }
+    case 4: {
+      //top right for 2nd triangle, both need to move
+      theta += delta_theta;
+      phi += delta_phi;
+      break;
+    }
+    case 5: {
+      //top left, need phi change
+      phi += delta_phi;
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  let x = r * sin(phi) * sin(theta);
+  let y = r * sin(phi) * cos(theta);
+  let z = r * cos(phi);
+
+  return vec4f(x + particle.pos.x, y + particle.pos.y, z + particle.pos.z, 1);
 }
 
 @vertex
@@ -139,12 +227,27 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
   let theta = 2. * pi / 8 * f32(vIdx);
   let x = cos(theta) * size;
   let y = sin(theta) * size;
-  return vec4f(vec2f(x + particle.pos.x, y + particle.pos.y), 0, 1);
+  let z = cos(theta) * size;
+  return vec4f(x + particle.pos.x, y + particle.pos.y, z + particle.pos.z, 1);
 }
 
 @fragment
 fn fragmentMain() -> @location(0) vec4f {
-  return vec4f(1, 0, 0, 1); // red is cool
+  // let particle = particlesIn[idx];
+  // const maxVel = vec3f(.4f, .4f, .4f);
+  // const maxMagnitude = sqrt(dot(maxVel, maxVel));
+  // var particleMagnitude = sqrt(dot(particle.vel, particle.vel));
+  // if (particleMagnitude > maxMagnitude) {
+  //   particleMagnitude = maxMagnitude;
+  // }
+  // var r = (255.f*(particleMagnitude/maxMagnitude))/255.f;
+  // var g = 0/255.f;
+  // var b = 1 - (255.f*(particleMagnitude/maxMagnitude))/255.f;
+  // var a = 1;
+  // var color = vec4f(r, g, b, a);
+
+  // return color; // (R, G, B, A)
+  return vec4f(1, 0, 0, 1);
 }
 
 // https://youtu.be/rSKMYc1CQHE?feature=shared&t=1846
@@ -197,7 +300,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
   let idx = global_id.x;
   
   if (idx < arrayLength(&particlesIn)) {
-    particlesOut[idx] = particlesIn[idx];
+    // particlesOut[idx] = particlesIn[idx];
     
     let particle = particlesIn[idx];
     //f = ma
@@ -246,12 +349,12 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
 }
 
 //find all the forces that should be applied to a given particle, and the net direction of these forces
-fn calculateForces(idx: u32) -> vec2f {
-  var particle = particlesIn[idx];
-  var forces = vec2f(0, 0);
+fn calculateForces(idx: u32) -> vec3f{
   
+  var particle = particlesIn[idx];
+  var forces = vec3f(0, 0, 0);
   //apply gravity
-  forces += vec2f(0, -9.81) * constants.gravityMultiplier;
+  forces += vec3f(0, -9.81, 0) * gravity_multiplier;
 
   // calculate pressure force
   forces -= pressureApproximation(particle.pos, idx) * constants.pressureMultiplier;
@@ -259,11 +362,11 @@ fn calculateForces(idx: u32) -> vec2f {
   //calculate viscosity force
   forces += viscosityApproximation(idx) * viscosity_multiplier;
 
-  forces = max(min(forces, vec2f(max_force, max_force)), vec2f(-max_force, -max_force));
+  forces = max(min(forces, vec3f(max_force, max_force, max_force)), vec3f(-max_force, -max_force, -max_force));
   return forces;
 }
 
-fn densityApproximation(position: vec2f) -> f32{
+fn densityApproximation(position: vec3f) -> f32{
   let use_acceleration = timeBuffer[2];
   if (use_acceleration == 0){
     return rawDensityCalculation(position);
@@ -271,7 +374,7 @@ fn densityApproximation(position: vec2f) -> f32{
   return acceleratedDensityCalculation(position);
 }
 
-fn rawDensityCalculation(position : vec2f) -> f32{
+fn rawDensityCalculation(position : vec3f) -> f32{
   var density = 0.0;
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
     var distance = length(position - particlesIn[i].pos);
@@ -280,28 +383,36 @@ fn rawDensityCalculation(position : vec2f) -> f32{
   return density;
 }
 
-fn acceleratedDensityCalculation(position: vec2f) -> f32{
+fn acceleratedDensityCalculation(position: vec3f) -> f32{
   var density = 0.0;
   var particle2 : Particle;
   //find the cell that the particle is in
   var x = i32(floor((position.x - getLeftBound()) / cell_size));
   var y = i32(floor((position.y - getBottomBound()) / cell_size));
+  var z = i32(floor((position.z - getFrontBound()) / cell_size));
+
   for(var adjacent_x = x-1; adjacent_x < x+2; adjacent_x++){
     for (var adjacent_y = y-1; adjacent_y < y+2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
-        //boundary checking
-        if (adjacent_x < 0 || adjacent_x > getGridLength()){ continue; }
-        if (adjacent_y < 0 || adjacent_y > getGridHeight()){ continue; }
+      for (var adjacent_z = z-1; adjacent_z < z+2; adjacent_z++){
 
-        var cell_start = (adjacent_y * getGridLength() + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
-        var len = gridIn[cell_start] + 2;
-        for (var i = cell_start + 1; i < cell_start + len; i++){
-          var pIdx = gridIn[i]; // the particle index
-          if (pIdx == -1) {  //check if no more particles in this cell
-            break;
-          }
-        particle2 = particlesIn[pIdx];
-        var distance = length(position - particle2.pos);
-        density += mass * smoothingFunction(smoothing_radius, distance);
+          //boundary checking
+          if (adjacent_x < 0 || adjacent_x > getGridLength()){ continue; }
+          if (adjacent_y < 0 || adjacent_y > getGridHeight()){ continue; }
+          if (adjacent_z < 0 || adjacent_z > getGridWidth()){ continue; }
+
+          //var cell_start = ((z * this._grid_height * this._grid_length) + (y * this._grid_length) + x) * this._max_per_cell;
+
+          var cell_start = getGridIndex(x,y,z);
+          var len = gridIn[cell_start] + 2; //recall that the first index of each cell is used as an index
+          for (var i = cell_start + 1; i < cell_start + len; i++){
+            var pIdx = gridIn[i]; // the particle index
+            if (pIdx == -1) {  //check if no more particles in this cell
+              break;
+            }
+          particle2 = particlesIn[pIdx];
+          var distance = length(position - particle2.pos);
+          density += mass * smoothingFunction(smoothing_radius, distance);
+        }
       }
     }
   }
@@ -314,7 +425,7 @@ fn densityToPressure(density : f32) -> f32{
   return density - target_density;
 }
 
-fn pressureApproximation(position: vec2f, particle_idx: u32) -> vec2f{
+fn pressureApproximation(position: vec3f, particle_idx: u32) -> vec3f{
   let use_acceleration = timeBuffer[2];
   if (use_acceleration == 0){
     return rawPressureCalculation(position, particle_idx);
@@ -322,8 +433,8 @@ fn pressureApproximation(position: vec2f, particle_idx: u32) -> vec2f{
   return acceleratedPressureCalculation(position, particle_idx);
 }
 
-fn rawPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
-  var pressure_force = vec2f(0, 0);
+fn rawPressureCalculation(position: vec3f, particle_idx: u32) -> vec3f{
+  var pressure_force = vec3f(0, 0, 0);
   var current_density = densityBuffer[particle_idx];
   var particle2 : Particle;
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
@@ -332,27 +443,33 @@ fn rawPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
   return pressure_force;
 }
 
-fn acceleratedPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
-  var pressure_force = vec2f(0, 0);
+fn acceleratedPressureCalculation(position: vec3f, particle_idx: u32) -> vec3f{
+  var pressure_force = vec3f(0, 0, 0);
   
   //find the cell that the particle is in
   var x = i32(floor((position.x - getLeftBound()) / cell_size));
   var y = i32(floor((position.y - getBottomBound()) / cell_size));
+  var z = i32(floor((position.z - getFrontBound()) / cell_size));
+
   for(var adjacent_x = x-1; adjacent_x < x+2; adjacent_x++){
     if (adjacent_x < 0 || adjacent_x > getGridLength()){ continue; }
     for (var adjacent_y = y-1; adjacent_y < y+2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
       //boundary checking
       if (adjacent_y < 0 || adjacent_y > getGridHeight()){ continue; }
+      for (var adjacent_z = z-1; adjacent_z < z+2; adjacent_z++){
+        
+        if (adjacent_z < 0 || adjacent_z > getGridWidth()){ continue; }
 
-      var cell_start = (adjacent_y * getGridLength() + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
-      var len = gridIn[cell_start] + 2;
-      for (var i = cell_start + 1; i < cell_start + len; i++){
-        var pIdx = gridIn[i]; // the particle index
-        if (pIdx == -1) {  //check if no more particles in this cell
-          break;
-        }
-        if (pIdx != i32(particle_idx)) {
-          pressure_force += pressureFromPoint(particle_idx, pIdx);
+        var cell_start = getGridIndex(x,y,z); //recall that the first index of each cell is used as an index
+        var len = gridIn[cell_start] + 2;
+        for (var i = cell_start + 1; i < cell_start + len; i++){
+          var pIdx = gridIn[i]; // the particle index
+          if (pIdx == -1) {  //check if no more particles in this cell
+            break;
+          }
+          if (pIdx != i32(particle_idx)) {
+            pressure_force += pressureFromPoint(particle_idx, pIdx);
+          }
         }
       }
     }
@@ -360,10 +477,10 @@ fn acceleratedPressureCalculation(position: vec2f, particle_idx: u32) -> vec2f{
   return pressure_force;
 }
 
-fn pressureFromPoint(particle1Idx: u32, particle2Idx: i32) -> vec2f{
+fn pressureFromPoint(particle1Idx: u32, particle2Idx: i32) -> vec3f{
   var temp = particlesIn[particle1Idx].pos - particlesIn[particle2Idx].pos;
   var distance = length(temp);
-  var pressure_force = vec2f(0, 0);
+  var pressure_force = vec3f(0, 0, 0);
   if (distance > 0.00000001) {
     var direction = temp / distance;
     var current_density = densityBuffer[particle1Idx];
@@ -394,7 +511,7 @@ fn getSharedPressure(density1: f32, density2: f32) -> f32{
   return (pressure1 + pressure2) / 2;
 }
 
-fn viscosityApproximation(idx: u32) -> vec2f{
+fn viscosityApproximation(idx: u32) -> vec3f{
   let use_acceleration = timeBuffer[2];
   if (use_acceleration == 0){
     return rawViscosityCalculation(idx);
@@ -402,8 +519,8 @@ fn viscosityApproximation(idx: u32) -> vec2f{
   return acceleratedViscosityCalculation(idx);
 }
 
-fn rawViscosityCalculation(idx : u32) -> vec2f{
-  var viscosity_force = vec2f(0,0);
+fn rawViscosityCalculation(idx : u32) -> vec3f{
+  var viscosity_force = vec3f(0,0,0);
   var particle = particlesIn[idx];
   for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
     var particle2 = particlesIn[i];
@@ -414,29 +531,35 @@ fn rawViscosityCalculation(idx : u32) -> vec2f{
   return viscosity_force;
 }
 
-fn acceleratedViscosityCalculation(idx: u32) -> vec2f{
-  var viscosity_force = vec2f(0,0);
+fn acceleratedViscosityCalculation(idx: u32) -> vec3f{
+  var viscosity_force = vec3f(0,0,0);
   var particle = particlesIn[idx];
   var particle2 : Particle;
   //find the cell that the particle is in
   var x = i32(floor((particle.pos.x - getLeftBound()) / cell_size));
   var y = i32(floor((particle.pos.y - getBottomBound()) / cell_size));
+  var z = i32(floor((particle.pos.z - getFrontBound()) / cell_size));
   for(var adjacent_x = x-1; adjacent_x < x+2; adjacent_x++){
     for (var adjacent_y = y-1; adjacent_y < y+2; adjacent_y++){ //iterate over adjacent cells from the cell_pos
-      //boundary checking
-      if (adjacent_x < 0 || adjacent_x > getGridLength()){ continue; }
-      if (adjacent_y < 0 || adjacent_y > getGridHeight()){ continue; }
+      for (var adjacent_z = z-1; adjacent_z < z+2; adjacent_z++){
+        
+        
+        //boundary checking
+        if (adjacent_x < 0 || adjacent_x > getGridLength()){ continue; }
+        if (adjacent_y < 0 || adjacent_y > getGridHeight()){ continue; }
+        if (adjacent_z < 0 || adjacent_z > getGridWidth()){ continue; }
 
-      var cell_start = (adjacent_y * getGridLength() + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
-      for (var i = cell_start + 1; i < cell_start + max_per_cell; i++){
-        var pIdx = gridIn[i]; // the particle index
-        if (pIdx == -1) {  //check if no more particles in this cell
-          break;
+        var cell_start = (adjacent_y * getGridLength() + adjacent_x) * max_per_cell; //recall that the first index of each cell is used as an index
+        for (var i = cell_start + 1; i < cell_start + max_per_cell; i++){
+          var pIdx = gridIn[i]; // the particle index
+          if (pIdx == -1) {  //check if no more particles in this cell
+            break;
+          }
+          var particle2 = particlesIn[pIdx];
+          var distance = length(particle.pos - particle2.pos);
+          var influence = viscositySmoothFunction(smoothing_radius, distance);
+          viscosity_force += (particle2.vel - particle.vel) * influence; 
         }
-        var particle2 = particlesIn[pIdx];
-        var distance = length(particle.pos - particle2.pos);
-        var influence = viscositySmoothFunction(smoothing_radius, distance);
-        viscosity_force += (particle2.vel - particle.vel) * influence; 
       }
     }
   }
@@ -505,4 +628,8 @@ fn computeDensity(@builtin(global_invocation_id) global_id: vec3u){
   if (global_id.x < arrayLength(&densityBuffer)){
     densityBuffer[global_id.x] = densityApproximation(particlesIn[global_id.x].pos);
   }
+}
+
+fn getGridIndex(x: i32, y:i32, z:i32) -> i32{
+  return (z * getGridLength() * getGridHeight() + y * getGridLength() + x) * max_per_cell; 
 }
