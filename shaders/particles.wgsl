@@ -55,7 +55,6 @@ const fallback_bottom = -1.0;
 //grid parameters
 const cell_size = .04;
 const max_per_cell = 512;
-const use_acceleration = 1; //non-zero to use acceleration structures
 
 //fluid simulation parameters
 const mass = 1;
@@ -111,9 +110,6 @@ fn getBottomBound() -> f32 {
   return fallback_bottom;
 }
 
-/*
-*
-*/
 fn getGridLength() -> i32 {
   return i32(ceil((getRightBound() - getLeftBound())/cell_size)) + 1;
 }
@@ -205,6 +201,7 @@ fn calculateForces(idx: u32) -> vec2f{
 }
 
 fn densityApproximation(position: vec2f) -> f32{
+  let use_acceleration = timeBuffer[2];
   if (use_acceleration == 0){
     return rawDensityCalculation(position);
   }
@@ -255,6 +252,7 @@ fn densityToPressure(density : f32) -> f32{
 }
 
 fn pressureApproximation(position: vec2f, particle_idx: u32) -> vec2f{
+  let use_acceleration = timeBuffer[2];
   if (use_acceleration == 0){
     return rawPressureCalculation(position, particle_idx);
   }
@@ -334,6 +332,7 @@ fn getSharedPressure(density1: f32, density2: f32) -> f32{
 }
 
 fn viscosityApproximation(idx: u32) -> vec2f{
+  let use_acceleration = timeBuffer[2];
   if (use_acceleration == 0){
     return rawViscosityCalculation(idx);
   }
