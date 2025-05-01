@@ -113,13 +113,26 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
   let theta = 2. * pi / 8 * f32(vIdx);
   let x = cos(theta) * size;
   let y = sin(theta) * size;
-  return vec4f(x + particle.pos.x, y + particle.pos.y, particle.pos.z, 1);
+  let z = cos(theta) * size;
+  return vec4f(x + particle.pos.x, y + particle.pos.y, z + particle.pos.z, 1);
 }
 
 @fragment
-fn fragmentMain(@builtin(position) p: vec4f) -> @location(0) vec4f {
-  return vec4f(p.z, 0, 0, 1); // (R, G, B, A)
-  // return p;
+fn fragmentMain() -> @location(0) vec4f {
+  let particle = particlesIn[idx];
+  const maxVel = vec3f(.4f, .4f, .4f);
+  const maxMagnitude = sqrt(dot(maxVel, maxVel));
+  var particleMagnitude = sqrt(dot(particle.vel, particle.vel));
+  if (particleMagnitude > maxMagnitude) {
+    particleMagnitude = maxMagnitude;
+  }
+  var r = (255.f*(particleMagnitude/maxMagnitude))/255.f;
+  var g = 0/255.f;
+  var b = 1 - (255.f*(particleMagnitude/maxMagnitude))/255.f;
+  var a = 1;
+  var color = vec4f(r, g, b, a);
+
+  return color; // (R, G, B, A)
 }
 
 @compute @workgroup_size(256)
