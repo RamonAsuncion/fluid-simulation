@@ -47,6 +47,13 @@ struct MultiVector {
   eoexeyez: f32
 }
 
+struct SimulationConstants {
+  pressureMultiplier: f32,
+  gravityMultiplier: f32,
+  reserved1: f32,
+  reserved2: f32,
+}
+
 const use_binding_box = 1;
 const fallback_left = -1.0;
 const fallback_right = 1.0;
@@ -82,6 +89,8 @@ const velocity_damping = .8; //multiplies final computed velocity, between 0.5 a
 @group(0) @binding(6) var<uniform> cameraPose: Camera;
 @group(0) @binding(7) var<uniform> mouse: MouseInteraction;
 @group(0) @binding(8) var<storage, read_write> densityBuffer: array<f32>;
+@group(0) @binding(9) var<uniform> constants: SimulationConstants;
+
 
 fn getSimulationSpeed() -> f32 {
   return timeBuffer[1] * 0.9 + 0.1; // 0->0.1 1->1.0
@@ -237,15 +246,15 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
 }
 
 //find all the forces that should be applied to a given particle, and the net direction of these forces
-fn calculateForces(idx: u32) -> vec2f{
-  
+fn calculateForces(idx: u32) -> vec2f {
   var particle = particlesIn[idx];
   var forces = vec2f(0, 0);
+  
   //apply gravity
-  forces += vec2f(0, -9.81) * gravity_multiplier;
+  forces += vec2f(0, -9.81) * constants.gravityMultiplier;
 
   // calculate pressure force
-  forces -= pressureApproximation(particle.pos, idx) * pressure_multiplier; //negative for some reason...
+  forces -= pressureApproximation(particle.pos, idx) * constants.pressureMultiplier;
   
   //calculate viscosity force
   forces += viscosityApproximation(idx) * viscosity_multiplier;
