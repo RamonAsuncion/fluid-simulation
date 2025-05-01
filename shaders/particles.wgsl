@@ -70,7 +70,7 @@ const viscosity_multiplier = 5;
 const max_vel = .1;
 const max_force = .02;
 const velocity_damping = .8; //multiplies final computed velocity, between 0.5 and 1 prolly
-const steps_per_update = .4; //lower value = slower/more stable simulation, somewhere between .1 and 1
+// const steps_per_update = .4; //lower value = slower/more stable simulation, somewhere between .1 and 1
 
 @group(0) @binding(0) var<storage> particlesIn: array<Particle>;
 @group(0) @binding(1) var<storage, read_write> particlesOut: array<Particle>;
@@ -81,6 +81,10 @@ const steps_per_update = .4; //lower value = slower/more stable simulation, some
 @group(0) @binding(6) var<uniform> cameraPose: Camera;
 @group(0) @binding(7) var<uniform> mouse: MouseInteraction;
 @group(0) @binding(8) var<storage, read_write> densityBuffer: array<f32>;
+
+fn getSimulationSpeed() -> f32 {
+  return timeBuffer[1] * 0.9 + 0.1; // 0->0.1 1->1.0
+}
 
 fn getLeftBound() -> f32 {
   if (use_binding_box != 0) {
@@ -144,7 +148,8 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     //f = ma
     let forces = calculateForces(idx);
     let accel = forces / mass;
-    var newVel = particle.vel + accel * steps_per_update;
+    var newVel = particle.vel + accel * getSimulationSpeed();
+    // * steps_per_update;
     
     //cap the velocity
     if (abs(newVel.x) > max_vel) {
@@ -158,7 +163,8 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
     newVel *= velocity_damping;
 
     // update particle position
-    var newPos = particle.pos + newVel * steps_per_update;
+    var newPos = particle.pos + newVel * getSimulationSpeed();
+    // * steps_per_update;
     
     //keep the particles in the bounding box, damp a bit from bouncing off the sides
     if (newPos.x < getLeftBound()){
