@@ -11,7 +11,7 @@ struct MouseInteraction {
   position: vec2f,
   isDown: f32,
   radius: f32,
-  attractMode: f32 // 1 attract, 0 repel
+  attractMode: f32 // 1 attract, 0 repel (make -1 then just multiple instead of if)
 };
 
 struct Camera {

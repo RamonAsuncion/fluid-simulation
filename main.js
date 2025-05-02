@@ -17,12 +17,16 @@ async function init() {
   var frameInterval = secPerFrame * 1000;
   var lastCalled;
   var playing = true;
-  let lastMouseX = 0;
-  let lastMouseY = 0;
-  let mouseDown = 0;
   let rotateSpeed = 0.01;
   var isDragging = false;
+  let isCtrlPressed = false;
   var attract = -1;
+
+  let mouseDown = false;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
+  let mouseX = 0;
+  let mouseY = 0;
 
   const canvasTag = document.createElement("canvas");
   canvasTag.id = "renderCanvas";
@@ -73,6 +77,9 @@ async function init() {
   };
 
   window.addEventListener("keydown", (e) => {
+    if (e.key === "Control") {
+      isCtrlPressed = true;
+    }
     if (e.key === "Shift") {
       particles.setAttractMode(true);
       particles.setMouseDown(true);
@@ -95,6 +102,9 @@ async function init() {
   });
 
   window.addEventListener("keyup", (e) => {
+    if (e.key === "Control") {
+      isCtrlPressed = false;
+    }
     if (e.key === "Shift") {
       particles.setAttractMode(false);
       if (!isDragging) {
@@ -105,41 +115,57 @@ async function init() {
 
   canvasTag.addEventListener("mousedown", (e) => {
     const rect = canvasTag.getBoundingClientRect();
-    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
-    lastMouseX = mouseX;
-    lastMouseY = mouseY;
+    mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+
+    mouseDown = true;
+    isDragging = true;
 
     particles.setMousePosition(mouseX, mouseY);
     particles.setMouseDown(true);
-    isDragging = true;
-    console.log("currently dragging");
   });
 
   canvasTag.addEventListener("mousemove", (e) => {
     const rect = canvasTag.getBoundingClientRect();
-    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
-    lastMouseX = mouseX;
-    lastMouseY = mouseY;
+    mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
 
-    if (isCtrlPressed) {
+    const deltaX = e.clientX - lastMouseX;
+    const deltaY = e.clientY - lastMouseY;
+
+    if (mouseDown && isCtrlPressed) {
       camera.rotateY(deltaX * rotateSpeed);
-      camera.rotateX(deltaY * rotateSpeed);
+      camera.rotateX(-deltaY * rotateSpeed);
       particles.updateCameraPose(camera);
-    }
-
-    particles.setMousePosition(mouseX, mouseY);
-
-    if (isDragging) {
+    } else {
       particles.setMousePosition(mouseX, mouseY);
     }
+
+    // Update last positions for next frame
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
   });
 
   canvasTag.addEventListener("mouseup", (e) => {
-    particles.setMouseDown(false);
+    mouseDown = false;
     isDragging = false;
+    particles.setMouseDown(false);
   });
+
+  // https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaY
+  canvasTag.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const zoomAmount = e.deltaY * 0.005;
+      camera.moveZ(zoomAmount);
+      particles.updateCameraPose(camera);
+    },
+    { passive: false }
+  );
 
   lastCalled = Date.now();
   renderFrame();
