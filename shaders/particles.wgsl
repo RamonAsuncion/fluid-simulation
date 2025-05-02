@@ -249,7 +249,7 @@ fn ballBasedVertex(@builtin(instance_index) idx: u32, @builtin(vertex_index) vId
   let center = getBoundingBoxCenter();
   let worldPos = vec3f(x, y, z);
   
-  let relativePos = worldPos - center;
+  let relativePos = worldPos; // - center;
   let transformedPos = transformPt(relativePos);
   let finalPos = transformedPos + vec3f(0, 0, 2.0);
   
