@@ -2,17 +2,43 @@ import Renderer from "./lib/Viz/3DRenderer.js";
 import ParticleSystemObject from "./lib/DSViz/ParticleSystemObject.js";
 import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
 import GuiControls from "./lib/Controls/GuiControls.js";
+import Camera from "/lib/Viz/3DCamera.js";
+
+/**
+ *
+ * TODO: Ctrl + click rotates the camera.
+ * TODO: move around mouse effects the particles
+ */
 
 async function init() {
+  var frameCnt = 0;
+  var tgtFPS = 60;
+  var secPerFrame = 1 / tgtFPS;
+  var frameInterval = secPerFrame * 1000;
+  var lastCalled;
+  var playing = true;
+  let rotateSpeed = 0.01;
+  var isDragging = false;
+  var attract = -1;
+
+  let mouseDown = false;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
+  let mouseX = 0;
+  let mouseY = 0;
+
   const canvasTag = document.createElement("canvas");
   canvasTag.id = "renderCanvas";
   document.body.appendChild(canvasTag);
   const renderer = new Renderer(canvasTag);
   await renderer.init();
 
+  var camera = new Camera();
+
   const particles = new ParticleSystemObject(
     renderer._device,
-    renderer._canvasFormat
+    renderer._canvasFormat,
+    camera
   );
 
   await renderer.appendSceneObject(particles);
@@ -22,25 +48,22 @@ async function init() {
     controls = new GuiControls(particles);
     controls.setInitialValues({ boxWidth: 1.9 });
   } catch (e) {
-    console.log("GUI controls not available: ", e);
+    console.error("GUI controls not available: ", e);
   }
 
   let fps = "??";
-  var fpsText = new StandardTextObject(
-    "fps: " +
-      fps +
-      "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset\nshift: attract"
-  );
+  var fpsText = new StandardTextObject("fps: " + fps);
 
-  // run animation at 60 fps
-  var frameCnt = 0;
-  var tgtFPS = 60;
-  var secPerFrame = 1 / tgtFPS;
-  var frameInterval = secPerFrame * 1000;
-  var lastCalled;
-  var playing = true;
+  var instructionsText = new StandardTextObject(
+    "Controls:\n" +
+      "R - Reset simulation\n" +
+      "P - Pause menu\n" +
+      "Drag - Move particles\n" +
+      "Drag + Ctrl - Rotate camera"
+  );
+  instructionsText._textCanvas.style.top = "60px";
+
   let renderFrame = () => {
-    //console.log("rendering");
     let elapsed = Date.now() - lastCalled;
     if (elapsed > frameInterval) {
       ++frameCnt;
@@ -51,9 +74,6 @@ async function init() {
     }
     requestAnimationFrame(renderFrame);
   };
-
-  var isDragging = false;
-  var attract = -1;
 
   window.addEventListener("keydown", (e) => {
     if (e.key === "Shift") {
@@ -73,7 +93,6 @@ async function init() {
       case "r":
       case "R":
         particles.resetParticles();
-        console.log("Simulation reset");
         break;
     }
   });
@@ -89,39 +108,68 @@ async function init() {
 
   canvasTag.addEventListener("mousedown", (e) => {
     const rect = canvasTag.getBoundingClientRect();
-    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+    mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
+
+    mouseDown = true;
+    isDragging = true;
 
     particles.setMousePosition(mouseX, mouseY);
     particles.setMouseDown(true);
-    isDragging = true;
+    console.log(`Mouse down at (${mouseX.toFixed(2)}, ${mouseY.toFixed(2)})`);
   });
 
   canvasTag.addEventListener("mousemove", (e) => {
     const rect = canvasTag.getBoundingClientRect();
-    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-    const mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
+    mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
 
-    particles.setMousePosition(mouseX, mouseY);
+    const deltaX = e.clientX - lastMouseX;
+    const deltaY = e.clientY - lastMouseY;
 
-    if (isDragging) {
+    if (mouseDown) {
+      console.log(
+        `Camera rotate: deltaX=${deltaX.toFixed(2)}, deltaY=${deltaY.toFixed(
+          2
+        )}`
+      );
+      camera.rotateY(deltaX * rotateSpeed);
+      camera.rotateX(-deltaY * rotateSpeed);
+      particles.updateCameraPose(camera);
+    } else {
       particles.setMousePosition(mouseX, mouseY);
     }
+
+    // Update last positions for next frame
+    lastMouseX = e.clientX;
+    lastMouseY = e.clientY;
   });
 
   canvasTag.addEventListener("mouseup", (e) => {
-    particles.setMouseDown(false);
+    mouseDown = false;
     isDragging = false;
+    particles.setMouseDown(false);
   });
+
+  // https://developer.mozilla.org/en-US/docs/Web/API/WheelEvent/deltaY
+  canvasTag.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const zoomAmount = e.deltaY * 0.005;
+      camera.moveZ(zoomAmount);
+      particles.updateCameraPose(camera);
+    },
+    { passive: false }
+  );
 
   lastCalled = Date.now();
   renderFrame();
   setInterval(() => {
-    fpsText.updateText(
-      "fps: " +
-        frameCnt +
-        "\nClick and drag to interact!\nq: push/pull\np: pause\nr: reset\nshift: attract"
-    );
+    fpsText.updateText("fps: " + frameCnt);
     frameCnt = 0;
   }, 1000); // call every 1000 ms
   return renderer;
