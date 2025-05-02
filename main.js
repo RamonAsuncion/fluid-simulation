@@ -4,12 +4,6 @@ import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
 import GuiControls from "./lib/Controls/GuiControls.js";
 import Camera from "/lib/Viz/3DCamera.js";
 
-/**
- *
- * TODO: Ctrl + click rotates the camera.
- * TODO: move around mouse effects the particles
- */
-
 async function init() {
   var frameCnt = 0;
   var tgtFPS = 60;
@@ -59,7 +53,7 @@ async function init() {
       "R - Reset simulation\n" +
       "P - Pause menu\n" +
       "Drag - Move particles\n" +
-      "Drag + Ctrl - Rotate camera"
+      "Drag + Click - Rotate camera"
   );
   instructionsText._textCanvas.style.top = "60px";
 
