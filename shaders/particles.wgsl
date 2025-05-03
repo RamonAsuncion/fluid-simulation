@@ -233,7 +233,11 @@ fn vertexMain(@builtin(instance_index) idx: u32, @builtin(vertex_index) vIdx: u3
 
 @fragment
 fn fragmentMain() -> @location(0) vec4f {
-  return vec4f(1, 0, 0, 1);
+  let r = timeBuffer[3];
+  let g = timeBuffer[4];
+  let b = timeBuffer[5];
+  // return vec4f(1, 0, 0, 1);
+  return vec4f(r,g,b,1);
 }
 
 // https://youtu.be/rSKMYc1CQHE?feature=shared&t=1846
@@ -244,6 +248,7 @@ fn applyMouseForce(position: vec3f, velocity: vec3f) -> vec3f {
   if (mouse.isDown > 0.5) {
     let mousePos = vec3f(mouse.position.x, mouse.position.y, 1); // x,y, z is fucking annoying
     let mouseRadius = mouse.radius; // interaction radius
+
 
     // dist for particle and mouse pos
     let distance = length(position - mousePos);
