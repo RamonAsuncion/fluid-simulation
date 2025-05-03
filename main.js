@@ -2,7 +2,7 @@ import Renderer from "./lib/Viz/3DRenderer.js";
 import ParticleSystemObject from "./lib/DSViz/ParticleSystemObject.js";
 import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
 import GuiControls from "./lib/Controls/GuiControls.js";
-import Camera from "/lib/Viz/3DCamera.js";
+import { Camera } from "./camera.js";
 
 async function init() {
   var frameCnt = 0;
@@ -11,7 +11,6 @@ async function init() {
   var frameInterval = secPerFrame * 1000;
   var lastCalled;
   var playing = true;
-  let rotateSpeed = 0.01;
   var isDragging = false;
   var attract = -1;
 
@@ -27,7 +26,8 @@ async function init() {
   const renderer = new Renderer(canvasTag);
   await renderer.init();
 
-  var camera = new Camera();
+  const camera = new Camera(canvasTag);
+  camera.reset(3, [0, 0, 0], Math.PI / 3, 0.2);
 
   const particles = new ParticleSystemObject(
     renderer._device,
@@ -120,24 +120,10 @@ async function init() {
     const rect = canvasTag.getBoundingClientRect();
     mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
-
-    const deltaX = e.clientX - lastMouseX;
-    const deltaY = e.clientY - lastMouseY;
-
+    particles.setMousePosition(mouseX, mouseY);
     if (mouseDown) {
-      console.log(
-        `Camera rotate: deltaX=${deltaX.toFixed(2)}, deltaY=${deltaY.toFixed(
-          2
-        )}`
-      );
-      camera.rotateY(deltaX * rotateSpeed);
-      camera.rotateX(-deltaY * rotateSpeed);
       particles.updateCameraPose(camera);
-    } else {
-      particles.setMousePosition(mouseX, mouseY);
     }
-
-    // Update last positions for next frame
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
   });
@@ -153,8 +139,6 @@ async function init() {
     "wheel",
     (e) => {
       e.preventDefault();
-      const zoomAmount = e.deltaY * 0.005;
-      camera.moveZ(zoomAmount);
       particles.updateCameraPose(camera);
     },
     { passive: false }
