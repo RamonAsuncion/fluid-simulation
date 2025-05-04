@@ -62,7 +62,7 @@ export class Camera {
         this.currentHoverY = event.clientY;
         if (this.isDragging) {
           const deltaX = this.prevX - event.clientX;
-          const deltaY = this.prevY - event.clientY;
+          const deltaY = event.clientY - this.prevY; // invert up/down
           this.currentXtheta += this.sensitivity * deltaX;
           this.currentYtheta += this.sensitivity * deltaY;
           if (this.currentYtheta > this.maxYTheta)
@@ -120,7 +120,7 @@ export class Camera {
     const view = mat4.lookAt(
       [position[0], position[1], position[2]], // position
       this.target, // target
-      [0, 1, 0] // up
+      [0, 1, 0] // flip to invert up/down
     );
 
     renderUniformsViews.viewMatrix.set(view);
