@@ -22,10 +22,6 @@ export class Camera {
     this.prevHoverY = 0;
     this.currentHoverX = 0;
     this.currentHoverY = 0;
-    // this.currentXtheta = -Math.PI / 2;
-    // this.currentYtheta = (-Math.PI / 12) * 0.8;
-    // this.maxYTheta = (-Math.PI / 12) * 0.8;
-    // this.minYTheta = (-0.99 * Math.PI) / 2;
     this.currentXtheta = -Math.PI / 2;
     this.currentYtheta = Math.PI / 4;
     this.maxYTheta = Math.PI / 2.5;
@@ -37,8 +33,6 @@ export class Camera {
     this.target = [0, 0, 0];
     this.fov = Math.PI / 3;
     this.zoomRate = 0.2;
-
-    // todo: udpate the _target variable to the bottom of the bounding box use
 
     this.viewMatrix = new Float32Array(16);
     this.invViewMatrix = new Float32Array(16);
@@ -93,24 +87,22 @@ export class Camera {
     this.isDragging = false;
     this.prevX = 0;
     this.prevY = 0;
-    // this.currentXtheta = -Math.PI / 2;
-    // this.currentYtheta = (-Math.PI / 12) * 0.8;
-    // this.maxYTheta = (-Math.PI / 12) * 0.8;
-    // this.minYTheta = (-0.99 * Math.PI) / 2;
-    this.currentXtheta = -Math.PI / 2;
-    this.currentYtheta = Math.PI / 4;
-    this.maxYTheta = Math.PI / 2.5;
-    this.minYTheta = -Math.PI / 12;
+    this.currentXtheta = -Math.PI / 2; // same rotation around y
+    this.currentYtheta = Math.PI / 5; // look down at platform
+
+    this.maxYTheta = Math.PI / 2.5; // upper limit (looking down)
+    this.minYTheta = -Math.PI / 20; // lower limit (almost horizontal)
+
     this.sensitivity = 0.005;
     this.currentDistance = initDistance;
-    this.maxDistance = 1.3 * this.currentDistance;
-    this.minDistance = 0.8 * this.currentDistance;
+    this.maxDistance = 5.0; // zoom out
+    this.minDistance = 0.2; // zooom in
     this.target = target;
     this.fov = fov;
-    this.zoomRate = zoomRate;
+    this.zoomRate = 0.1; // slow zoom
 
     const aspect = this.canvas.clientWidth / this.canvas.clientHeight;
-    const projection = mat4.perspective(fov, aspect, 0.1, 300);
+    const projection = mat4.perspective(fov, aspect, 0.01, 300);
     renderUniformsViews.projectionMatrix.set(projection);
     renderUniformsViews.invProjectionMatrix.set(mat4.inverse(projection));
 
