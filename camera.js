@@ -83,6 +83,7 @@ export class Camera {
     }
   }
 
+  // use this to change to original values https://raw.githubusercontent.com/matsuoka-601/Splash/refs/heads/main/camera.ts
   reset(initDistance, target, fov, zoomRate) {
     this.isDragging = false;
     this.prevX = 0;
@@ -90,13 +91,13 @@ export class Camera {
     this.currentXtheta = -Math.PI / 2; // same rotation around y
     this.currentYtheta = Math.PI / 5; // look down at platform
 
-    this.maxYTheta = Math.PI / 2.5; // upper limit (looking down)
+    this.maxYTheta = (0.99 * Math.PI) / 2; // upper limit (looking down)
     this.minYTheta = -Math.PI / 20; // lower limit (almost horizontal)
 
     this.sensitivity = 0.005;
     this.currentDistance = initDistance;
-    this.maxDistance = 5.0; // zoom out
-    this.minDistance = 0.2; // zooom in
+    this.maxDistance = 3.0; // zoom out
+    this.minDistance = 1.5; // zoom in
     this.target = target;
     this.fov = fov;
     this.zoomRate = 0.1; // slow zoom
@@ -117,9 +118,11 @@ export class Camera {
     mat4.translate(mat, [0, 0, this.currentDistance], mat);
     var position = mat4.multiply(mat, [0, 0, 0, 1]);
 
+    const lookAtPosition = [this.target[0], this.target[1], this.target[2]];
+
     const view = mat4.lookAt(
       [position[0], position[1], position[2]], // position
-      this.target, // target
+      lookAtPosition, // target
       [0, 1, 0] // flip to invert up/down
     );
 
