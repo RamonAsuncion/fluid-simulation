@@ -37,6 +37,15 @@ struct SimulationConstants {
   reserved2: f32,
 }
 
+struct Point {
+  pos: vec3f,
+  scalar: f32
+}
+
+struct GridCell {
+  vertices: array<Point, 8>
+}
+
 const use_binding_box = 1;
 const fallback_left = -1.0;
 const fallback_right = 1.0;
@@ -73,6 +82,7 @@ const velocity_damping = .8; //multiplies final computed velocity, between 0.5 a
 @group(0) @binding(7) var<uniform> mouse: MouseInteraction;
 @group(0) @binding(8) var<storage, read_write> densityBuffer: array<f32>;
 @group(0) @binding(9) var<uniform> constants: SimulationConstants;
+@group(0) @binding(10)var<storage> triangles: array<vec3f>;
 
 fn getSimulationSpeed() -> f32 {
   return timeBuffer[1] * 0.9 + 0.1; // 0->0.1 1->1.0
@@ -616,6 +626,53 @@ fn computeGridStructure(@builtin(global_invocation_id) global_id: vec3u){
 fn computeDensity(@builtin(global_invocation_id) global_id: vec3u){
   if (global_id.x < arrayLength(&densityBuffer)){
     densityBuffer[global_id.x] = densityApproximation(particlesIn[global_id.x].pos.xyz);
+  }
+}
+
+@compute @workgroup_size(256)
+fn computeCubeMarch(@builtin(global_invocation_id) global_id: vec3u){
+  // scalar function for grid cubes is based on DENSITY of particles around each vertex
+  // Isolevel determines how many particles need to be near a vertex to count it for the rendering of the isosurface
+  // Need to find a way to get the density of particles for each vertex - distance from all particles to each corner
+  // Also need to get vertices for each grid cell
+  // Compare distances from all particles to each corner to isolevel
+  if (global_id.x < arrayLength(&gridOut)){
+    var start_index = global_id.x * u32(constants.max_per_cell);
+    var num_particles = atomicLoad(&gridOut[start_index]);
+    // get grid indices
+    var grid_x = i32(global_id.x) % getGridLength();
+    var grid_y = (i32(global_id.x) / getGridLength()) % getGridHeight();
+    var grid_z = i32(global_id.x) / (getGridHeight() * getGridWidth());
+
+    // get grid world positions for all 8 vertices - then scalar values
+    var current_grid_cell: GridCell;
+    var world_x = f32(grid_x) * cell_size - f32(getLeftBound());
+    var world_y = f32(grid_y) * cell_size - f32(getBottomBound());
+    var world_z = f32(grid_z) * cell_size - f32(getFrontBound());
+    for (var i = 0; i < 8; i++) {
+      // world position
+      current_grid_cell.vertices[i].pos = vec3f(world_x, world_y, world_z);
+      var remainder = i % 4;
+      if (remainder == 1 || remainder == 2) {
+        current_grid_cell.vertices[i].pos.x += cell_size;
+      }
+      if (remainder == 2 || remainder == 3) {
+        current_grid_cell.vertices[i].pos.z += cell_size;
+      }
+      if (i < 4) {
+        current_grid_cell.vertices[i].pos.y += cell_size;
+      }
+
+      // scalar value
+      for (var j = 1; j < num_particles; j++) {
+        var particle_idx = atomicLoad(&gridOut[j]);
+        var position = particlesIn[particle_idx].pos.xyz;
+        var distance = length(current_grid_cell.vertices[i].pos - position);
+        current_grid_cell.vertices[i].scalar += distance;
+      }
+    }
+
+    // 
   }
 }
 
