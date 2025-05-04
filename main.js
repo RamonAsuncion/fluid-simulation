@@ -27,6 +27,12 @@ async function init() {
   await renderer.init();
 
   const camera = new Camera(canvasTag);
+  /**
+   * camera distance from target,
+   * initial target point,
+   * field of view (60 degrees)
+   * zoom rate
+   */
   camera.reset(3, [0, 0, 0], Math.PI / 3, 0.2);
 
   const particles = new ParticleSystemObject(
