@@ -11,7 +11,9 @@ struct MouseInteraction {
   position: vec2f,
   isDown: f32,
   radius: f32,
-  attractMode: f32 // 1 attract, 0 repel (todo: multiply with 1 or -1)
+  attractMode: f32,
+  forceMultiplier: f32,
+  dummy: vec2f
 };
 
 struct BoundaryBox {
@@ -248,6 +250,8 @@ fn applyMouseForce(position: vec3f, velocity: vec3f) -> vec3f {
     // dist for particle and mouse pos
     let distance = length(position - mousePos);
 
+    
+
     if (distance < mouseRadius) {
       var direction: vec3f;
       var forceMagnitude: f32;
@@ -279,6 +283,42 @@ fn applyMouseForce(position: vec3f, velocity: vec3f) -> vec3f {
   }
 
   return newVelocity;
+}
+
+@compute @workgroup_size(1)
+fn mouseRayMarch() {
+  //ray march along the line drawn from the camera pose and the mouse (x,y,1) coord to find which particles to interact with
+  // if (mouse.isDown > .5) { return; }
+
+  let start = vec3f(mouse.position.xy, 1);
+  let dir = start - cameraPose.cameraPosition.xyz;
+  let delta_t = .01;
+  var t = 0.0;
+  while (t < 10000000){
+    var current_position = dir * t + start;
+    var found = false;
+    var found_total = 0;
+    //check to see what particles are within reach of the current position
+    for (var i = 0; i < i32(arrayLength(&particlesIn)); i++){
+      var particle = particlesIn[i];
+      var dist = length(current_position - particle.pos.xyz);
+      // if (dist < mouse.radius && dist > .000001){
+        var direction = (current_position - particle.pos.xyz) / dist;
+        var accel = direction * mouse.attractMode * mouse.forceMultiplier / mass;
+        particle.vel += vec4f(accel, 0);
+        found = true;
+      // }
+    }
+    if (found){
+      found_total += 1;
+      if (found_total > 5){
+        break;
+      }
+    }
+    t += delta_t;
+  }
+  
+  
 }
 
 @compute @workgroup_size(256)
