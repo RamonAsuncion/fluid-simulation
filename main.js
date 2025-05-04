@@ -4,6 +4,8 @@ import StandardTextObject from "./lib/DSViz/StandardTextObject.js";
 import GuiControls from "./lib/Controls/GuiControls.js";
 import { Camera } from "./camera.js";
 
+let DEBUG = false;
+
 async function init() {
   var frameCnt = 0;
   var tgtFPS = 60;
@@ -19,6 +21,12 @@ async function init() {
   let lastMouseY = 0;
   let mouseX = 0;
   let mouseY = 0;
+
+  let lastMouseMoveTime = 0;
+  let mouseVelocityX = 0;
+  let mouseVelocityY = 0;
+  let mouseMoving = 0;
+  let mouseMovementTimeout = null;
 
   const canvasTag = document.createElement("canvas");
   canvasTag.id = "renderCanvas";
@@ -79,6 +87,10 @@ async function init() {
     requestAnimationFrame(renderFrame);
   };
 
+  /**
+   * todo: shift sets the attraction mode (fix later/add interaction)
+   */
+
   window.addEventListener("keydown", (e) => {
     if (e.key === "Shift") {
       particles.setAttractMode(true);
@@ -123,22 +135,54 @@ async function init() {
 
     particles.setMousePosition(mouseX, mouseY);
     particles.setMouseDown(true);
-    console.log(`Mouse down at (${mouseX.toFixed(2)}, ${mouseY.toFixed(2)})`);
+    if (DEBUG)
+      console.log(`Mouse down at (${mouseX.toFixed(2)}, ${mouseY.toFixed(2)})`);
   });
+
+  particles.setMouseRadius(0.3);
 
   canvasTag.addEventListener("mousemove", (e) => {
     const rect = canvasTag.getBoundingClientRect();
+    const currentTime = performance.now();
+    const timeDelta = currentTime - lastMouseMoveTime;
     mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouseY = (1 - (e.clientY - rect.top) / rect.height) * 2 - 1;
-    particles.setMousePosition(mouseX, mouseY);
-    if (mouseDown) {
-      particles.updateCameraPose(camera);
+    if (timeDelta > 5) {
+      mouseVelocityX = (mouseX - lastMouseX) / (timeDelta / 1000);
+      mouseVelocityY = (mouseY - lastMouseY) / (timeDelta / 1000);
+      lastMouseMoveTime = currentTime;
+      mouseMoving = 1;
+      clearTimeout(mouseMovementTimeout);
+      mouseMovementTimeout = setTimeout(() => {
+        mouseMoving = 0;
+
+        mouseVelocityX = 0;
+        mouseVelocityY = 0;
+        particles.updateMouseVelocity(
+          mouseVelocityX,
+          mouseVelocityY,
+          mouseMoving
+        );
+      }, 100);
     }
+    particles.setMousePosition(mouseX, mouseY);
+    particles.updateMouseVelocity(mouseVelocityX, mouseVelocityY, mouseMoving);
+    particles.updateCameraPose(camera);
     lastMouseX = e.clientX;
     lastMouseY = e.clientY;
+    if (DEBUG)
+      console.log(`Mouse move at (${mouseX.toFixed(2)}, ${mouseY.toFixed(2)})`);
   });
 
   canvasTag.addEventListener("mouseup", (e) => {
+    console.log("Mouse down:", particles._mousePosition[2]);
+    console.log(
+      "Mouse position:",
+      particles._mousePosition[0],
+      particles._mousePosition[1]
+    );
+    console.log("Mouse radius:", particles._mousePosition[3]);
+    console.log("Attract mode:", particles._mousePosition[4]);
     mouseDown = false;
     isDragging = false;
     particles.setMouseDown(false);

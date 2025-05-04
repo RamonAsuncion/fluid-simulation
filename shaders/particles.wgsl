@@ -7,11 +7,20 @@ struct Particle {
   dummy : vec2f,
 };
 
+/**
+* todo: Switch between the the different particles file from 2D to 3D look at old commit
+' and make a toggle on the UI to be able to toggle between both of them.
+*/
+
 struct MouseInteraction {
   position: vec2f,
   isDown: f32,
   radius: f32,
-  attractMode: f32 // 1 attract, 0 repel (todo: multiply with 1 or -1)
+  attractMode: f32, // 1 attract, 0 repel (todo: multiply with 1 or -1)
+  lastMove: f32,
+  velX: f32,
+  velY: f32,
+  isMoving: f32
 };
 
 struct BoundaryBox {
@@ -23,7 +32,6 @@ struct BoundaryBox {
   back: f32
 };
 
-// Updated camera struct to use matrices instead of MultiVector
 struct Camera {
   viewMatrix: mat4x4f,
   invViewMatrix: mat4x4f,
@@ -161,7 +169,6 @@ fn ballBasedVertex(@builtin(instance_index) idx: u32, @builtin(vertex_index) vId
   //same for phi, k total divisions, j is the number of divisions we traveled
   let delta_phi = (pi) / f32(k - 1);
   var phi = -pi/2 + delta_phi * f32(j); 
-  // 
   switch (vertex_number) {
     case 0: {
       //bot left for 1st triangle
@@ -240,51 +247,6 @@ fn fragmentMain() -> @location(0) vec4f {
   return vec4f(r,g,b,1);
 }
 
-// https://youtu.be/rSKMYc1CQHE?feature=shared&t=1846
-fn applyMouseForce(position: vec3f, velocity: vec3f) -> vec3f {
-  var newVelocity = velocity;
-
-  // button is pressed
-  if (mouse.isDown > 0.5) {
-    let mousePos = vec3f(mouse.position.x, mouse.position.y, 1); // x,y, z is fucking annoying
-    let mouseRadius = mouse.radius; // interaction radius
-
-
-    // dist for particle and mouse pos
-    let distance = length(position - mousePos);
-
-    if (distance < mouseRadius) {
-      var direction: vec3f;
-      var forceMagnitude: f32;
-
-      if (mouse.attractMode > 0.5) {
-        // attract: pull toward mouse
-        direction = normalize(mousePos - position);
-
-        // trying to fix clumping issues
-        forceMagnitude = 0.05 * (1.0 - (distance / mouseRadius) * (distance / mouseRadius));
-
-        if (distance < 0.02) {
-          forceMagnitude = 0.0;
-        }
-
-      } else {
-        // repel: push away from mouse
-        direction = normalize(position - mousePos);
-
-        // base force with linear falloff
-        // increase the base force to create a wider
-        // area of influence fot the mouse
-        forceMagnitude = 0.08 * (1.0 - distance / mouseRadius);
-      }
-
-      // apply force by adding to velocity
-      newVelocity += direction * forceMagnitude;
-    }
-  }
-
-  return newVelocity;
-}
 
 @compute @workgroup_size(256)
 fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
@@ -344,6 +306,66 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3u) {
   }
 }
 
+/**
+tood:
+axis are flipped I have to interact with the particles on the empty space from the top
+ and it only works in when looking from one direction you can't move it from the top or at an angle
+*/
+
+// https://youtu.be/rSKMYc1CQHE?feature=shared&t=1846
+// cast a single ray from the camera through the mouse positon
+// each particle you find hte closerp oint to that ray
+// then apply force
+fn applyMouseForce(position: vec3f, velocity: vec3f) -> vec3f {
+  /**
+  * constantly apply mouse force with movement no mouse needed
+  the mouseDown is not enough because that's an actual click
+  */
+  if (mouse.isMoving < 0.5) {
+    return velocity;
+  }
+
+  // ray from camera through mouse pos
+  let mouseRay = vec4f(mouse.position.x, mouse.position.y, -1.0, 1.0);
+  
+  // world space using the inverse view matrix
+  let rayDir = normalize((cameraPose.invViewMatrix * mouseRay).xyz);
+  let rayOrigin = cameraPose.cameraPosition.xyz;
+  
+  // find the closet point on the ray
+  // https://gamedev.stackexchange.com/questions/131400/find-the-closest-point-on-a-ray
+  let origin = position - rayOrigin;
+  let projection = dot(origin, rayDir);
+  let closetPoint = rayOrigin + rayDir * max(0.0, projection);
+  let dist = length(position - closetPoint);
+
+  // todo: never reaching inside if statement  
+  // affect particles in the mouse radius
+  let effectiveRadius = mouse.radius * 5.0;
+  if (dist < effectiveRadius) {
+
+    // strength decreases with distance (quadratic falloff)
+    // let strength = 1.0 - (dist / mouse.radius) * (dist / mouse.radius);
+    let strength = pow(1.0 - (dist / effectiveRadius), 2.0);
+    
+    // direction based on attract mode
+    var direction = vec3f(0.0);
+    if (mouse.attractMode > 0.5) {
+      // attract mode
+      direction = normalize(closetPoint - position);
+    } else {
+      // repel mode
+      direction = normalize(position - closetPoint);
+    }
+    // for debugging stronger force so I can actually see it
+    let forceMag = strength * 30; // 0.05 * 
+    return velocity + direction * forceMag;
+  }
+
+  return velocity;
+}
+
+
 //find all the forces that should be applied to a given particle, and the net direction of these forces
 fn calculateForces(idx: u32) -> vec3f{
   
@@ -359,6 +381,8 @@ fn calculateForces(idx: u32) -> vec3f{
   // forces += viscosityApproximation(idx) * viscosity_multiplier;
 
   // forces += applyMouseForce(particle.pos.xyz, particle.vel.xyz);
+  var mouseVel = applyMouseForce(particle.pos.xyz, particle.vel.xyz);
+  forces += (mouseVel - particle.vel.xyz) * mass * 5.0; // f=ma * scale
 
   forces = max(min(forces, vec3f(max_force, max_force, max_force)), vec3f(-max_force, -max_force, -max_force));
   return forces;
