@@ -35,6 +35,10 @@ async function init() {
     camera
   );
 
+  const boxCenter = particles.getCenterBoundaryBox();
+  camera.target = boxCenter;
+  camera.reset(3, boxCenter, Math.PI / 3, 0.2);
+
   await renderer.appendSceneObject(particles);
 
   let controls;
