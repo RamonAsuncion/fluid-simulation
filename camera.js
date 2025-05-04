@@ -22,10 +22,14 @@ export class Camera {
     this.prevHoverY = 0;
     this.currentHoverX = 0;
     this.currentHoverY = 0;
+    // this.currentXtheta = -Math.PI / 2;
+    // this.currentYtheta = (-Math.PI / 12) * 0.8;
+    // this.maxYTheta = (-Math.PI / 12) * 0.8;
+    // this.minYTheta = (-0.99 * Math.PI) / 2;
     this.currentXtheta = -Math.PI / 2;
-    this.currentYtheta = (-Math.PI / 12) * 0.8;
-    this.maxYTheta = (-Math.PI / 12) * 0.8;
-    this.minYTheta = (-0.99 * Math.PI) / 2;
+    this.currentYtheta = Math.PI / 4;
+    this.maxYTheta = Math.PI / 2.5;
+    this.minYTheta = -Math.PI / 12;
     this.sensitivity = 0.005;
     this.currentDistance = 3;
     this.maxDistance = 5;
@@ -34,13 +38,13 @@ export class Camera {
     this.fov = Math.PI / 3;
     this.zoomRate = 0.2;
 
-    // Expose view matrices for shader access
+    // todo: udpate the _target variable to the bottom of the bounding box use
+
     this.viewMatrix = new Float32Array(16);
     this.invViewMatrix = new Float32Array(16);
     mat4.identity(this.viewMatrix);
     mat4.identity(this.invViewMatrix);
 
-    // Event listeners for camera control
     if (this.canvas) {
       this.canvas.addEventListener("mousedown", (event) => {
         this.isDragging = true;
@@ -89,10 +93,14 @@ export class Camera {
     this.isDragging = false;
     this.prevX = 0;
     this.prevY = 0;
+    // this.currentXtheta = -Math.PI / 2;
+    // this.currentYtheta = (-Math.PI / 12) * 0.8;
+    // this.maxYTheta = (-Math.PI / 12) * 0.8;
+    // this.minYTheta = (-0.99 * Math.PI) / 2;
     this.currentXtheta = -Math.PI / 2;
-    this.currentYtheta = (-Math.PI / 12) * 0.8;
-    this.maxYTheta = (-Math.PI / 12) * 0.8;
-    this.minYTheta = (-0.99 * Math.PI) / 2;
+    this.currentYtheta = Math.PI / 4;
+    this.maxYTheta = Math.PI / 2.5;
+    this.minYTheta = -Math.PI / 12;
     this.sensitivity = 0.005;
     this.currentDistance = initDistance;
     this.maxDistance = 1.3 * this.currentDistance;
@@ -126,7 +134,6 @@ export class Camera {
     renderUniformsViews.viewMatrix.set(view);
     renderUniformsViews.invViewMatrix.set(mat4.inverse(view));
 
-    // Update local copies for direct access by ParticleSystemObject
     this.viewMatrix.set(view);
     this.invViewMatrix.set(mat4.inverse(view));
   }
