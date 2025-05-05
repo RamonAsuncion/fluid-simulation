@@ -39,7 +39,7 @@ export default class GuiControls {
 
   _init(particles) {
     const urlParams = new URLSearchParams(window.location.search);
-    const currentMode = urlParams.get("mode") || "3D";
+    const currentMode = urlParams.get("mode") || "2D";
 
     this.particles = particles;
     this.params = {
@@ -58,7 +58,6 @@ export default class GuiControls {
 
       resetSimulation: () => {
         this.particles.resetParticles();
-        particles.fill_grid();
         console.log("Reset simulation requested");
       },
 
@@ -91,16 +90,15 @@ export default class GuiControls {
 
     particlesFolder
       .add(this.params, "particleCount", {
-        "5,000": 5000,
         "10,000": 10000,
-        "15,000": 15000,
-        "20,000": 20000,
+        "25,000": 25000,
+        "50,000": 50000,
+        "100,000": 100000,
       })
       .name("Number of particles")
       .onChange((value) => {
         // TODO: Update particle count
         console.log(`Particle count changed to: ${value}`);
-        this.particles.changeParticleCount(value);
       });
 
     particlesFolder
@@ -116,6 +114,7 @@ export default class GuiControls {
       .name("Acceleration Mode")
       .onChange((value) => {
         this.particles._use_acceleration = value;
+        this.particles.updateAccelerationMode();
         this.particles.updateTimeBuffer();
       });
 
@@ -125,18 +124,6 @@ export default class GuiControls {
       .onChange((value) => {
         // TODO: Toggle between debug mode
         console.log(`Acceleration mode ${value ? "enabled" : "disabled"}`);
-      });
-
-    const colorFolder = this.gui.addFolder("Diffuse Color");
-    colorFolder
-      .addColor(this.params, "diffuseColor")
-      .name("Diffuse Color")
-      .onChange((value) => {
-        // TODO: Update diffuse color
-        console.log(
-          `Color changed to: R=${value.r}, G=${value.g}, B=${value.b}`
-        );
-        this.particles.setRGB(value.r, value.g, value.b);
       });
 
     const physicsFolder = this.gui.addFolder("Physics");
