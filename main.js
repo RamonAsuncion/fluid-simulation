@@ -7,6 +7,14 @@ import { Camera } from "./camera.js";
 let DEBUG = false;
 
 async function init() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const mode = urlParams.get("mode") || "3D";
+
+  if (mode !== "3D") {
+    window.location.href = "/?mode=2D";
+    return;
+  }
+
   var frameCnt = 0;
   var tgtFPS = 60;
   var secPerFrame = 1 / tgtFPS;
@@ -58,7 +66,7 @@ async function init() {
   let controls;
   try {
     controls = new GuiControls(particles);
-    controls.setInitialValues({ boxWidth: 1.9 });
+    controls.setInitialValues({ boxWidth: 1.9, simulationMode: "3D" });
   } catch (e) {
     console.error("GUI controls not available: ", e);
   }
@@ -139,7 +147,7 @@ async function init() {
       console.log(`Mouse down at (${mouseX.toFixed(2)}, ${mouseY.toFixed(2)})`);
   });
 
-  particles.setMouseRadius(0.3);
+  particles.setMouseRadius(0.5);
 
   canvasTag.addEventListener("mousemove", (e) => {
     const rect = canvasTag.getBoundingClientRect();

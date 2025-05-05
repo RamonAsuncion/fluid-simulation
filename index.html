@@ -1,59 +1,33 @@
 <!DOCTYPE html>
-<!-- Comments in HTML -->
-<!-- 
- * Copyright (c) 2025 SingChun LEE @ Bucknell University. CC BY-NC 4.0.
- * 
- * This code is provided mainly for educational purposes at Bucknell University.
- *
- * This code is licensed under the Creative Commons Attribution-NonCommerical 4.0
- * International License. To view a copy of the license, visit 
- *   https://creativecommons.org/licenses/by-nc/4.0/
- * or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
- *
- * You are free to:
- *  - Share: copy and redistribute the material in any medium or format.
- *  - Adapt: remix, transform, and build upon the material.
- *
- * Under the following terms:
- *  - Attribution: You must give appropriate credit, provide a link to the license,
- *                 and indicate if changes where made.
- *  - NonCommerical: You may not use the material for commerical purposes.
- *  - No additional restrictions: You may not apply legal terms or technological 
- *                                measures that legally restrict others from doing
- *                                anything the license permits.
--->
-<html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Fluid Simulation</title>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0"
-    />
-    <link rel="icon" href="./assets/wave.ico" type="image/x-icon" />
     <style>
-      html,
       body,
-      .container {
-        overflow: hidden;
-        display: flex;
-        height: 100%;
+      html {
         margin: 0;
         padding: 0;
-        place-content: center center;
-      }
-
-      #renderCanvas {
-        image-rendering: pixelated;
-        display: block;
-        max-width: 100%;
+        overflow: hidden;
         width: 100%;
         height: 100%;
-        touch-action: none;
+        background: #111;
+      }
+
+      canvas {
+        display: block;
       }
     </style>
-    <script type="module" src="main.js"></script>
   </head>
-  <body></body>
+  <body>
+    <script>
+      const urlParams = new URLSearchParams(window.location.search);
+      const mode = urlParams.get("mode") || "3D";
+      const script = document.createElement("script");
+      script.type = "module";
+      script.src = mode === "3D" ? "./main.js" : "./2d/main.js";
+      document.body.appendChild(script);
+    </script>
+  </body>
 </html>
