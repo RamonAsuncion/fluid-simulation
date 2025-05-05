@@ -1,7 +1,7 @@
 import Renderer from "../lib/Viz/2DRenderer.js";
 import ParticleSystemObject from "./ParticleSystemObject.js";
 import StandardTextObject from "../lib/DSViz/StandardTextObject.js";
-import GuiControls from "../lib/Controls/GuiControls.js";
+import GuiControls from "./GuiControls.js";
 
 async function init() {
   const canvasTag = document.createElement("canvas");
@@ -20,7 +20,7 @@ async function init() {
   let controls;
   try {
     controls = new GuiControls(particles);
-    controls.setInitialValues({ boxWidth: 1.9 });
+    controls.setInitialValues({ boxWidth: 1.9, simulationMode: "2D" });
   } catch (e) {
     console.log("GUI controls not available: ", e);
   }
@@ -51,16 +51,6 @@ async function init() {
     }
     requestAnimationFrame(renderFrame);
   };
-
-  try {
-    let controls = new GuiControls(particles);
-    controls.setInitialValues({
-      boxWidth: 1.9,
-      simulationMode: "2D",
-    });
-  } catch (e) {
-    console.log("GUI controls not available: ", e);
-  }
 
   var isDragging = false;
   var attract = -1;
