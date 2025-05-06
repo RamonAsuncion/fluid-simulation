@@ -1,1 +1,72 @@
 # Fluid Simulation
+
+A real-time WebGPU-based particle fluid simulation with interactive controls.
+
+<img alt="Fluid Simulation" src="fluid.png">
+
+## Features
+
+- Both 2D and 3D visualization modes
+- Marching Cubes algorithm for realistic fluid surface rendering
+- Real-time parameter adjustment through GUI controls
+- Mouse interaction to manipulate fluid
+- High-performance computation using WebGPU
+
+## Installation
+
+1. Clone the repository:
+
+```sh
+git clone https://github.com/RamonAsuncion/fluid-simulation.git
+cd fluid-simulation
+```
+
+2. Run the local web server
+
+```sh
+python simple_server.py
+```
+
+3. Open your WebGPU-compatible browser (Chrome 113+ or Edge 113+) and navigate to:
+
+```sh
+http://localhost:8000
+```
+
+## Usage
+
+Controls
+
+- Click + Mouse Drag: Move particles in the simulation (2D mode only)
+- Shift + Mouse: Attract particles (2D mode only)
+- P: Pause/resume simulation
+- R: Reset simulation
+- Click + Mouse Drag: Rotate camera (3D mode only)
+
+GUI Controls
+
+- Simulation mode 2D vs 3D
+- Number of particles
+- Simulation speed
+- Acceleration mode (used to speed up the rendering)
+
+## Technical Details
+
+The simulation implements [Smoothed-particle hydrodynamics (SPH)](https://en.wikipedia.org/wiki/Smoothed-particle_hydrodynamics) for fluid dynamics simulation.
+
+Key technical components:
+
+- Spatial partitioning grid for efficient neighbor searching
+- Pressure and viscosity approximation
+- Marching cubes algorithm for surface extraction
+- WebGPU compute shaders for processing particle physics
+
+## Contributors
+
+- Ramon Asuncion - UI interactions
+- Nolan Sauers - Ray Marching
+- Luke Snyder - Physics
+
+## License
+
+Distributed under the Creative Commons Attribution-NonCommerical 4.0 International License. See LICENSE.txt for more information.
