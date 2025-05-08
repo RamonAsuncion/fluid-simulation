@@ -403,7 +403,6 @@ fn applyMouseForce(position: vec3f, velocity: vec3f) -> vec3f {
     let forceMag = strength * 30; // 0.05 * 
     return velocity + direction * forceMag;
   }
-
   return velocity;
 }
 
@@ -693,21 +692,42 @@ fn computeCubeMarch(@builtin(global_invocation_id) global_id: vec3u){
   // Also need to get vertices for each grid cell
   // Compare distances from all particles to each corner to isolevel
   if (global_id.x < arrayLength(&gridOut)){
+/*
+// Luke's code to convert particle to grid cell (x, y, z)
+    var x = i32(floor((particlesOut[global_id.x].pos.x - getLeftBound()) / cell_size));
+    var y = i32(floor((particlesOut[global_id.x].pos.y - getBottomBound()) / cell_size));
+    var z = i32(floor((particlesOut[global_id.x].pos.z - getFrontBound()) / cell_size));
+    if (x < 0 || x >= getGridLength() || y < 0 || y >= getGridHeight() || z < 0 || z >= getGridWidth()) {
+      return;
+    }
+    
+    var cell_start = (z * getGridLength() * getGridHeight() + y * getGridLength() + x) * i32(constants.max_per_cell);
+*/
+
+    // Given a grid cell id, 
     var start_index = global_id.x * u32(constants.max_per_cell);
     var num_particles = atomicLoad(&gridOut[start_index]);
-    // get grid indices
+    // first, get grid indices (x, y, z)
+    // length = x, height = y, width = z
+    // given idx = (z * getGridLength() * getGridHeight() + y * getGridLength() + x), how to compute x, y, and z?
+    // x = idx % length = ((z * getGridLength() * getGridHeight() + y * getGridLength() + x)) % length = x % length = x
+    // y = (idx / length) % height = (z * height + y) % height = y
+    // z = (idx / (length * height)) = z
     var grid_x = i32(global_id.x) % getGridLength();
     var grid_y = (i32(global_id.x) / getGridLength()) % getGridHeight();
-    var grid_z = i32(global_id.x) / (getGridHeight() * getGridWidth());
+    var grid_z = i32(global_id.x) / (getGridHeight() * getGridLength());
 
-    // get grid world positions for all 8 vertices - then scalar values
+    // then we convert back to the particle locations by revsering Luke's formula
     var current_grid_cell: GridCell;
-    var world_x = f32(grid_x) * cell_size - f32(getLeftBound());
-    var world_y = f32(grid_y) * cell_size - f32(getBottomBound());
-    var world_z = f32(grid_z) * cell_size - f32(getFrontBound());
+    var world_x = f32(grid_x) * cell_size + f32(getLeftBound());
+    var world_y = f32(grid_y) * cell_size + f32(getBottomBound());
+    var world_z = f32(grid_z) * cell_size + f32(getFrontBound());
+    // this gives us the lower-bottom-left corner of the cell
+    // now, we get all eight corners
     for (var i = 0; i < 8; i++) {
-      // world position
+      // particle simulation position - i.e. now the grid corners and the particles are in the same cooridantes 
       current_grid_cell.vertices[i].pos = vec3f(world_x, world_y, world_z);
+      // use remainders to the eight corners
       var remainder = i % 4;
       if (remainder == 1 || remainder == 2) {
         current_grid_cell.vertices[i].pos.x += cell_size;
@@ -719,18 +739,49 @@ fn computeCubeMarch(@builtin(global_invocation_id) global_id: vec3u){
         current_grid_cell.vertices[i].pos.y += cell_size;
       }
 
-      // scalar value
+      // right now, we only take one cell, but we need to check 8 cells instead of only one
+      // and for each of the eight grid corner of a cell, we need to chck particles in all eight cells containing that corner
+      // we will use Luke's formula to get the eight cell indices
       current_grid_cell.vertices[i].scalar = 0.0;
-      for (var j = 1; j < num_particles; j++) {
-        var particle_idx = atomicLoad(&gridOut[j]);
-        var position = particlesIn[particle_idx].pos.xyz;
-        var distance = length(current_grid_cell.vertices[i].pos - position);
-        current_grid_cell.vertices[i].scalar += 1.0 / (distance * distance + 0.01);
+      var offsetList = array<vec3f, 8>(vec3f(0, 0, 0), vec3f(-cell_size, 0, 0), vec3f(0, -cell_size, 0), vec3f(0, 0, -cell_size), vec3f(-cell_size, -cell_size, 0), vec3f(-cell_size, 0, -cell_size), vec3f(0, -cell_size, -cell_size), vec3f(-cell_size, -cell_size, -cell_size));
+      for (var kk = 0; kk < 8; kk++) { // for each corner, compute the eight cells containing this corner 
+        var cellCenter = current_grid_cell.vertices[i].pos + vec3f(cell_size, cell_size, cell_size) * 0.5 + offsetList[kk]; // get the cell center
+        var x = i32(floor((cellCenter.x - getLeftBound()) / cell_size));
+        var y = i32(floor((cellCenter.y - getBottomBound()) / cell_size));
+        var z = i32(floor((cellCenter.z - getFrontBound()) / cell_size));
+        if (x < 0 || x >= getGridLength() || y < 0 || y >= getGridHeight() || z < 0 || z >= getGridWidth()) {
+          continue;
+        }
+        var cell_start = (z * getGridLength() * getGridHeight() + y * getGridLength() + x) * i32(constants.max_per_cell);
+        var num_particles = atomicLoad(&gridOut[cell_start]);
+        // compute the scalar value at the corner using the color field, computed by the mass and density - sum_i m_i / rho_i * smoothing
+        for (var j = 1; j < num_particles; j++) {
+          var particle_idx = atomicLoad(&gridOut[cell_start + j]);
+          var position = particlesIn[particle_idx].pos.xyz;
+          var distance = length(current_grid_cell.vertices[i].pos - position);
+          //distance = 0.1;
+          //if (densityBuffer[particle_idx] > 0.0001) {
+          current_grid_cell.vertices[i].scalar += mass / densityBuffer[particle_idx] * smoothingFunction(smoothing_radius, distance);
+            //current_grid_cell.vertices[i].scalar += mass / densityBuffer[particle_idx];//smoothingFunction(smoothing_radius, distance);
+          //}
+        }
       }
+      // plane test - failed
+      /*
+      if (i < 4) {
+        current_grid_cell.vertices[i].scalar = 0.;
+      }
+      else {
+        current_grid_cell.vertices[i].scalar = 1.;
+      }
+      */
+      // sphere test - passed
+      // current_grid_cell.vertices[i].scalar = length(current_grid_cell.vertices[i].pos);
     }
 
     // create triangle information from grid cell
-    polygonise(current_grid_cell, 2.0, global_id.x);
+    var isolevel = constants.reserved2;
+    polygonise(current_grid_cell, isolevel, global_id.x);
   }
 }
 
