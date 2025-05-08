@@ -61,6 +61,11 @@ Key technical components:
 - Marching cubes algorithm for surface extraction
 - WebGPU compute shaders for processing particle physics
 
+
+## Video
+
+[https://youtu.be/Ad4BBsySpe0](https://youtu.be/Ad4BBsySpe0)
+
 ## Reflecions
 
 **Luke Synder:** For this project I mainly focused on the physics aspect of the simulation. My main inspiration was Sebastion League's video on fluid simulations. This was a very difficult project, with a lot having to be made before being able to see any results. While we didn't quite simulate water, I am still super proud of how the simulation looks and performs. The main changes that would improve the simulation would be how the particles interact with the edge of the box, and how the particles tend to climb together. I really enjoyed this project and learned a lot about webGPU and physics simulation.
