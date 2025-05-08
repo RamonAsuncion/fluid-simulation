@@ -61,6 +61,12 @@ Key technical components:
 - Marching cubes algorithm for surface extraction
 - WebGPU compute shaders for processing particle physics
 
+## Reflecions
+
+**Luke Synder:** For this project I mainly focused on the physics aspect of the simulation. My main inspiration was Sebastion League's video on fluid simulations. This was a very difficult project, with a lot having to be made before being able to see any results. While we didn't quite simulate water, I am still super proud of how the simulation looks and performs. The main changes that would improve the simulation would be how the particles interact with the edge of the box, and how the particles tend to climb together. I really enjoyed this project and learned a lot about webGPU and physics simulation.
+
+**Ramon Asuncion**: I focused on the user interaction and visual aspects of this project. The most challenging part was managing mouse interactions in the 3D space, as I considered using ray marching techniques. The idea was to create a ray from the camera to the mouse and then ray march until a particle was found. However, `applyMouseForce` function affects a large, specific section of the bounding box, so even a slight mouse movement changes a significant portion of the particles. Overall, though, the project was both fun and challenging, I wouldn’t have chosen any other.
+
 ## Contributors
 
 - Ramon Asuncion - UI interactions
