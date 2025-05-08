@@ -67,6 +67,8 @@ Key technical components:
 
 **Ramon Asuncion**: I focused on the user interaction and visual aspects of this project. The most challenging part was managing mouse interactions in the 3D space, as I considered using ray marching techniques. The idea was to create a ray from the camera to the mouse and then ray march until a particle was found. However, `applyMouseForce` function affects a large, specific section of the bounding box, so even a slight mouse movement changes a significant portion of the particles. Overall, though, the project was both fun and challenging, I wouldn’t have chosen any other.
 
+**Nolan Sauers**: I was the primary developer for the surface logic (using the famous marching cubes algorithm) to make a version of our simulation that looked and "flowed" like a realistic liquid. I got close many different times, but even after five or six different implementations it still wasn't perfect. As you can probably see, my biggest challenge was not the marching cubes algorithm itself but using it to render a realistic liquid movement based on our particles. Still, I was able to render a set of horizontal planes, a large sphere, and some honey-like substance with relative accuracy. Though it was frustrating at times, the final product is something I'm proud of enough to show anyone that wants to take a peek.
+
 ## Contributors
 
 - Ramon Asuncion - UI interactions
